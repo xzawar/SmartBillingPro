@@ -250,6 +250,13 @@ public class LoginFrame extends JFrame {
 
     /** Opens the correct workspace for a signed-in user. */
     static void openFrameFor(AppContext context, User user) {
+        // Start background cloud sync (no-op unless the cloud is configured and a
+        // device session has been saved).
+        try {
+            context.startCloudSync();
+        } catch (RuntimeException ignored) {
+            // never block sign-in on a sync problem
+        }
         if (user.getRole() == Role.ADMIN) {
             new AdminFrame(context).setVisible(true);
         } else {

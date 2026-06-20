@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Billing Pro - Online</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- ============ LOGIN ============ -->
+  <main id="login-view" class="login-wrap">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-logo">&#128722;</div>
+        <h1>Smart Billing Pro</h1>
+        <p class="muted">Online dashboard</p>
+      </div>
+      <form id="login-form">
+        <label for="username">Username</label>
+        <input id="username" type="text" autocomplete="username" required />
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required />
+        <label class="remember"><input id="remember" type="checkbox" checked /> Remember me</label>
+        <button type="submit" class="btn-primary">Sign in</button>
+        <p id="login-error" class="error"></p>
+      </form>
+    </div>
+  </main>
+
+  <!-- ============ APP SHELL ============ -->
+  <div id="app-view" class="hidden">
+    <header class="topbar">
+      <div class="topbar-title">&#128722; Smart Billing Pro <span class="muted" id="role-tag"></span></div>
+      <div class="topbar-right">
+        <select id="store-select" class="store-select hidden"></select>
+        <span id="who" class="muted"></span>
+        <button id="refresh-btn" class="btn-ghost">Refresh</button>
+        <button id="logout-btn" class="btn-ghost">Log out</button>
+      </div>
+    </header>
+
+    <!-- ADMIN CONSOLE -->
+    <section id="admin-section" class="hidden">
+      <div class="panel">
+        <h2>Stores</h2>
+        <p class="muted small">Activate newly registered stores, or enable/disable a whole store. Disabling blocks every account of that store from signing in (app and web).</p>
+        <table class="data-table">
+          <thead><tr><th>Store</th><th>Phone</th><th>Status</th><th>Owner</th><th>Actions</th></tr></thead>
+          <tbody id="stores-body"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- OWNER / MANAGER DASHBOARD -->
+    <section id="dash-section" class="hidden">
+      <div class="cards">
+        <div class="card"><div class="card-label">Today's Sales</div><div class="card-value" id="kpi-sales">-</div></div>
+        <div class="card"><div class="card-label">Invoices Today</div><div class="card-value" id="kpi-invoices">-</div></div>
+        <div class="card"><div class="card-label">Products</div><div class="card-value" id="kpi-products">-</div></div>
+        <div class="card"><div class="card-label">Low Stock</div><div class="card-value warn" id="kpi-lowstock">-</div></div>
+      </div>
+      <div class="panel">
+        <h2>Recent Invoices</h2>
+        <table class="data-table">
+          <thead><tr><th>Invoice #</th><th>Date</th><th>Cashier</th><th class="num">Total</th></tr></thead>
+          <tbody id="invoices-body"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>Low Stock Items <span class="muted small">(view only - inventory is edited in the app)</span></h2>
+        <table class="data-table">
+          <thead><tr><th>SKU</th><th>Name</th><th>Category</th><th class="num">Qty</th></tr></thead>
+          <tbody id="lowstock-body"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ACCOUNTS (admin: all; owner: their store's manager/cashier) -->
+    <section id="accounts-section" class="hidden">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Accounts</h2>
+          <button id="add-account-btn" class="btn-primary small">+ New account</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="accounts-body"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SETTINGS (owner/manager editable) -->
+    <section id="settings-section" class="hidden">
+      <div class="panel">
+        <h2>Store Settings</h2>
+        <form id="settings-form" class="form-grid"></form>
+        <button id="save-settings-btn" class="btn-primary">Save settings</button>
+        <span id="settings-msg" class="muted small"></span>
+      </div>
+    </section>
+
+    <nav class="tabbar" id="tabbar"></nav>
+  </div>
+
+  <!-- ============ MODAL ============ -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="modal-title">New account</h3>
+      <div id="modal-body"></div>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn-ghost dark">Cancel</button>
+        <button id="modal-ok" class="btn-primary">Save</button>
+      </div>
+      <p id="modal-error" class="error"></p>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -46,6 +46,7 @@ public class AppContext {
 
     private User currentUser;
     private Settings settings;
+    private final SupabaseSync cloudSync;
 
     public AppContext() {
         database = new Database(Database.defaultDbFile());
@@ -80,6 +81,21 @@ public class AppContext {
         this.reportService = new ReportService(invoiceService, inventoryService);
 
         this.settings = settingsService.load();
+
+        // Cloud sync runs only when SMARTBILLING_CLOUD_API is configured and a
+        // device session has been saved; otherwise it is a no-op and the app
+        // works fully offline.
+        this.cloudSync = new SupabaseSync(database, storeSession);
+    }
+
+    /** The cloud sync engine (Supabase via the Vercel API). */
+    public SupabaseSync getCloudSync() {
+        return cloudSync;
+    }
+
+    /** Begin background two-way sync (safe to call after login). */
+    public void startCloudSync() {
+        cloudSync.start();
     }
 
     public AuditService getAuditService() {
@@ -162,6 +178,11 @@ public class AppContext {
     }
 
     public void shutdown() {
+        try {
+            cloudSync.stop();
+        } catch (RuntimeException ignored) {
+            // best effort
+        }
         database.close();
     }
 }
