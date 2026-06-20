@@ -362,6 +362,27 @@ public class SupabaseSync {
                 }
             }
 
+            // Never let cloud sync touch the built-in administrator account. It
+            // is seeded identically on every device and must always stay ADMIN;
+            // a stray cloud value must not demote it (which used to send the
+            // admin into the store dashboard instead of the admin panel).
+            if (table.equals("users")) {
+                if ("admin".equalsIgnoreCase(str(row.get("username")))) {
+                    return;
+                }
+                if (rowid != null) {
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "SELECT username FROM users WHERE rowid = ?")) {
+                        ps.setLong(1, rowid);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            if (rs.next() && "admin".equalsIgnoreCase(rs.getString(1))) {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Never overwrite a row that still has unsaved local changes waiting
             // to be pushed. The local edit wins; it will be uploaded on the push
             // half of the cycle. Without this, a pull could clobber values the

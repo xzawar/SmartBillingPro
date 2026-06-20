@@ -165,6 +165,14 @@ public class Database {
         ensureColumn("invoices", "loyalty_earned", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("purchase_orders", "store_id", "INTEGER NOT NULL DEFAULT 0");
         ensureColumn("audit_log", "store_id", "INTEGER NOT NULL DEFAULT 0");
+
+        // Self-heal the built-in administrator. It must ALWAYS keep the ADMIN
+        // role and the shared store_id 0. An older buggy cloud sync could demote
+        // it to OWNER, which is why logging in as "admin" opened the store
+        // dashboard instead of the admin panel. Repair it on every startup.
+        try (Statement st = connection.createStatement()) {
+            st.executeUpdate("UPDATE users SET role = 'ADMIN', store_id = 0 WHERE username = 'admin'");
+        }
     }
 
     /** Add a column to a table if the table exists and the column is missing. */

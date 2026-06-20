@@ -336,13 +336,24 @@ public class LoginFrame extends JFrame {
 
     /** Whether a user may sign in through a launcher of the given mode. */
     static boolean allowed(User user, Mode mode) {
+        boolean isAdmin = isAdministrator(user);
         if (mode == Mode.ADMIN_ONLY) {
-            return user.getRole() == Role.ADMIN;
+            return isAdmin;
         }
         if (mode == Mode.STORE_ONLY) {
-            return user.getRole() != Role.ADMIN;
+            return !isAdmin;
         }
         return true;
+    }
+
+    /**
+     * True for the software administrator. We trust the ADMIN role, but also
+     * treat the built-in "admin" username as an administrator so a corrupted
+     * role can never lock the admin out of the admin panel.
+     */
+    static boolean isAdministrator(User user) {
+        return user.getRole() == Role.ADMIN
+                || "admin".equalsIgnoreCase(user.getUsername());
     }
 
     /** Opens the correct workspace for a signed-in user. */
@@ -354,7 +365,7 @@ public class LoginFrame extends JFrame {
         } catch (RuntimeException ignored) {
             // never block sign-in on a sync problem
         }
-        if (user.getRole() == Role.ADMIN) {
+        if (isAdministrator(user)) {
             new AdminFrame(context).setVisible(true);
         } else {
             context.reloadSettings();

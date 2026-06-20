@@ -48,6 +48,7 @@ public class MainFrame extends JFrame {
     private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
     private final LiveSync liveSync;
     private String currentKey;
+    private JPanel activationBanner;
 
     public MainFrame(AppContext context) {
         this.context = context;
@@ -58,7 +59,12 @@ public class MainFrame extends JFrame {
         setLocationRelativeTo(null);
 
         JPanel root = new JPanel(new BorderLayout());
-        root.add(buildTopBar(), BorderLayout.NORTH);
+        JPanel north = new JPanel(new BorderLayout());
+        north.add(buildTopBar(), BorderLayout.NORTH);
+        activationBanner = buildActivationBanner();
+        activationBanner.setVisible(storePending());
+        north.add(activationBanner, BorderLayout.SOUTH);
+        root.add(north, BorderLayout.NORTH);
         root.add(buildSidebar(), BorderLayout.WEST);
         content.setBackground(Theme.BG);
         content.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
@@ -187,8 +193,39 @@ public class MainFrame extends JFrame {
 
     /** Re-runs refresh on the panel that is currently visible. */
     public void refreshCurrent() {
+        if (activationBanner != null) {
+            // Hide the banner automatically once the administrator activates the store.
+            activationBanner.setVisible(storePending());
+        }
         if (currentKey != null) {
             navigateTo(currentKey);
+        }
+    }
+
+    /** A warning strip telling the owner the store is waiting for activation. */
+    private JPanel buildActivationBanner() {
+        JPanel banner = new JPanel(new BorderLayout());
+        banner.setBackground(Theme.WARNING);
+        banner.setBorder(BorderFactory.createEmptyBorder(10, 22, 10, 22));
+        JLabel msg = new JLabel("\u23F3  Waiting for administrator activation \u2014 "
+                + "your store is locked until an administrator activates it from the web console.");
+        msg.setFont(Theme.bold(13));
+        msg.setForeground(Color.WHITE);
+        banner.add(msg, BorderLayout.WEST);
+        return banner;
+    }
+
+    /** True when the signed-in user's store has not been activated yet. */
+    private boolean storePending() {
+        try {
+            int storeId = context.getCurrentStoreId();
+            if (storeId <= 0) {
+                return false;
+            }
+            com.smartbillingpro.model.Store store = context.getStoreService().findById(storeId);
+            return store != null && !store.isActive();
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 

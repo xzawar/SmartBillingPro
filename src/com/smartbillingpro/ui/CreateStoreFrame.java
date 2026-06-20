@@ -15,43 +15,60 @@ import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 
 /**
- * A full-screen, app-styled wizard for creating a brand-new store from the
- * desktop app (instead of a small pop-up dialog). It mirrors the look of the
- * main app: a gradient top bar, a dark step sidebar and a rounded card.
+ * An app-styled "Create a new store" experience that lives entirely inside one
+ * window. Instead of popping up a separate dialog for the owner account, both
+ * steps are shown as themed cards that swap in place (just like the rest of the
+ * app), so the whole flow feels native:
  *
- * <p>Flow:
  * <ol>
- *   <li>The user fills in the store details on this screen.</li>
- *   <li>Pressing <b>Continue</b> opens a pop-up to create the owner account.</li>
- *   <li>The owner account is created (defaulting to the OWNER role) and the
- *       user is signed straight into their dashboard.</li>
- *   <li>The store starts <em>not activated</em>: the dashboard opens but
- *       settings stay locked until an administrator activates the store from
- *       the web console.</li>
+ *   <li><b>Store details</b> - name, phone, address. Press Enter or Continue.</li>
+ *   <li><b>Owner account</b> - shown as a second card in the same window.</li>
+ *   <li>The owner is created and signed straight into their dashboard, which
+ *       opens <em>locked</em> with a "waiting for administrator activation"
+ *       banner until an administrator activates the store.</li>
  * </ol>
  */
 public class CreateStoreFrame extends JFrame {
 
     private final AppContext context;
     private final LoginFrame.Mode mode;
+
+    // Step 1 - store details
     private final JTextField storeName = new JTextField(22);
     private final JTextField storePhone = new JTextField(22);
     private final JTextField storeAddress = new JTextField(22);
-    private final JLabel errorLabel = new JLabel(" ");
+    private final JLabel storeError = new JLabel(" ");
+
+    // Step 2 - owner account
+    private final JTextField ownerName = new JTextField(22);
+    private final JTextField ownerUser = new JTextField(22);
+    private final JPasswordField ownerPass = new JPasswordField(22);
+    private final JPasswordField ownerConfirm = new JPasswordField(22);
+    private final JLabel ownerError = new JLabel(" ");
+    private RoundedButton createButton;
+
+    // Card swapping (store <-> owner) inside the same window
+    private final CardLayout cards = new CardLayout();
+    private final JPanel cardArea = new JPanel(cards);
+    private JLabel step1;
+    private JLabel step2;
+    private JLabel step3;
 
     public CreateStoreFrame(AppContext context, LoginFrame.Mode mode) {
         this.context = context;
@@ -67,6 +84,8 @@ public class CreateStoreFrame extends JFrame {
         root.add(buildSidebar(), BorderLayout.WEST);
         root.add(buildBody(), BorderLayout.CENTER);
         setContentPane(root);
+
+        showStep(1);
     }
 
     private JComponent buildTopBar() {
@@ -97,11 +116,14 @@ public class CreateStoreFrame extends JFrame {
         sidebar.setPreferredSize(new Dimension(232, 0));
         sidebar.setBorder(BorderFactory.createEmptyBorder(28, 26, 16, 16));
 
-        sidebar.add(stepLabel("1.  Store details", true));
+        step1 = stepLabel("1.  Store details");
+        step2 = stepLabel("2.  Owner account");
+        step3 = stepLabel("3.  Start using your shop");
+        sidebar.add(step1);
         sidebar.add(Box.createVerticalStrut(16));
-        sidebar.add(stepLabel("2.  Owner account", false));
+        sidebar.add(step2);
         sidebar.add(Box.createVerticalStrut(16));
-        sidebar.add(stepLabel("3.  Start using your shop", false));
+        sidebar.add(step3);
         sidebar.add(Box.createVerticalGlue());
 
         JLabel note = new JLabel("<html>New stores stay locked<br>until an administrator<br>activates them.</html>");
@@ -112,10 +134,10 @@ public class CreateStoreFrame extends JFrame {
         return sidebar;
     }
 
-    private JLabel stepLabel(String text, boolean active) {
+    private JLabel stepLabel(String text) {
         JLabel l = new JLabel(text);
-        l.setFont(active ? Theme.bold(14) : Theme.regular(14));
-        l.setForeground(active ? Color.WHITE : Theme.SIDEBAR_TEXT);
+        l.setFont(Theme.regular(14));
+        l.setForeground(Theme.SIDEBAR_TEXT);
         l.setAlignmentX(Component.LEFT_ALIGNMENT);
         return l;
     }
@@ -123,18 +145,20 @@ public class CreateStoreFrame extends JFrame {
     private JComponent buildBody() {
         JPanel wrapper = new JPanel(new GridBagLayout());
         wrapper.setBackground(Theme.BG);
+        cardArea.setOpaque(false);
+        cardArea.add(buildStoreCard(), "store");
+        cardArea.add(buildOwnerCard(), "owner");
+        wrapper.add(cardArea);
+        return wrapper;
+    }
 
+    // ---- Step 1 card: store details ----
+    private JComponent buildStoreCard() {
         RoundedPanel card = new RoundedPanel(new GridBagLayout());
         card.setArc(22);
         card.setBorder(BorderFactory.createEmptyBorder(32, 40, 32, 40));
-        card.setPreferredSize(new Dimension(470, 430));
-
-        GridBagConstraints c = new GridBagConstraints();
-        c.gridx = 0;
-        c.gridy = 0;
-        c.anchor = GridBagConstraints.WEST;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        c.weightx = 1;
+        card.setPreferredSize(new Dimension(480, 470));
+        GridBagConstraints c = baseConstraints();
 
         JLabel heading = new JLabel("Store details");
         heading.setFont(Theme.bold(22));
@@ -152,30 +176,91 @@ public class CreateStoreFrame extends JFrame {
         addField(card, c, "Address", storeAddress);
 
         c.gridy++;
-        c.insets = new java.awt.Insets(10, 0, 0, 0);
-        errorLabel.setFont(Theme.regular(12));
-        errorLabel.setForeground(Theme.DANGER);
-        card.add(errorLabel, c);
+        c.insets = new Insets(10, 0, 0, 0);
+        storeError.setFont(Theme.regular(12));
+        storeError.setForeground(Theme.DANGER);
+        card.add(storeError, c);
 
         c.gridy++;
-        c.insets = new java.awt.Insets(16, 0, 0, 0);
+        c.insets = new Insets(16, 0, 0, 0);
         RoundedButton cont = new RoundedButton("Continue", Theme.PRIMARY, Color.WHITE);
-        cont.addActionListener(e -> openOwnerDialog());
+        cont.addActionListener(e -> goToOwnerStep());
         card.add(cont, c);
 
-        wrapper.add(card);
-        return wrapper;
+        addEnter(storeName, this::goToOwnerStep);
+        addEnter(storePhone, this::goToOwnerStep);
+        addEnter(storeAddress, this::goToOwnerStep);
+        return card;
+    }
+
+    // ---- Step 2 card: owner account (identical styling, same window) ----
+    private JComponent buildOwnerCard() {
+        RoundedPanel card = new RoundedPanel(new GridBagLayout());
+        card.setArc(22);
+        card.setBorder(BorderFactory.createEmptyBorder(32, 40, 32, 40));
+        card.setPreferredSize(new Dimension(480, 520));
+        GridBagConstraints c = baseConstraints();
+
+        JLabel heading = new JLabel("Owner account");
+        heading.setFont(Theme.bold(22));
+        heading.setForeground(Theme.TEXT);
+        card.add(heading, c);
+
+        c.gridy++;
+        JLabel hint = new JLabel("Create the account you will use to run this store.");
+        hint.setFont(Theme.regular(13));
+        hint.setForeground(Theme.MUTED);
+        card.add(hint, c);
+
+        addField(card, c, "Your full name", ownerName);
+        addField(card, c, "Choose a username", ownerUser);
+        addField(card, c, "Choose a password", ownerPass);
+        addField(card, c, "Confirm password", ownerConfirm);
+
+        c.gridy++;
+        c.insets = new Insets(10, 0, 0, 0);
+        ownerError.setFont(Theme.regular(12));
+        ownerError.setForeground(Theme.DANGER);
+        card.add(ownerError, c);
+
+        c.gridy++;
+        c.insets = new Insets(16, 0, 0, 0);
+        createButton = new RoundedButton("Create store", Theme.PRIMARY, Color.WHITE);
+        createButton.addActionListener(e -> submitOwner());
+        card.add(createButton, c);
+
+        c.gridy++;
+        c.insets = new Insets(10, 0, 0, 0);
+        RoundedButton back = new RoundedButton("Back", Theme.withAlpha(Theme.PRIMARY, 30), Theme.TEXT);
+        back.addActionListener(e -> showStep(1));
+        card.add(back, c);
+
+        addEnter(ownerName, this::submitOwner);
+        addEnter(ownerUser, this::submitOwner);
+        addEnter(ownerPass, this::submitOwner);
+        addEnter(ownerConfirm, this::submitOwner);
+        return card;
+    }
+
+    private GridBagConstraints baseConstraints() {
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridx = 0;
+        c.gridy = 0;
+        c.anchor = GridBagConstraints.WEST;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
+        return c;
     }
 
     private void addField(RoundedPanel card, GridBagConstraints c, String label, JTextField field) {
         c.gridy++;
-        c.insets = new java.awt.Insets(18, 0, 4, 0);
+        c.insets = new Insets(16, 0, 4, 0);
         JLabel l = new JLabel(label);
         l.setFont(Theme.bold(12));
         l.setForeground(Theme.MUTED);
         card.add(l, c);
         c.gridy++;
-        c.insets = new java.awt.Insets(0, 0, 0, 0);
+        c.insets = new Insets(0, 0, 0, 0);
         field.setFont(Theme.regular(14));
         field.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(Theme.CARD_BORDER, 1, true),
@@ -183,95 +268,99 @@ public class CreateStoreFrame extends JFrame {
         card.add(field, c);
     }
 
-    /** Step 2: a pop-up to create the owner account, then register everything. */
-    private void openOwnerDialog() {
+    private void addEnter(JComponent field, Runnable action) {
+        field.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    action.run();
+                }
+            }
+        });
+    }
+
+    /** Swaps the visible card and highlights the matching step in the sidebar. */
+    private void showStep(int n) {
+        cards.show(cardArea, n == 1 ? "store" : "owner");
+        styleStep(step1, n == 1);
+        styleStep(step2, n == 2);
+        styleStep(step3, false);
+        SwingUtilities.invokeLater(() -> (n == 1 ? storeName : ownerName).requestFocusInWindow());
+    }
+
+    private void styleStep(JLabel l, boolean active) {
+        if (l == null) {
+            return;
+        }
+        l.setFont(active ? Theme.bold(14) : Theme.regular(14));
+        l.setForeground(active ? Color.WHITE : Theme.SIDEBAR_TEXT);
+    }
+
+    /** Validates the store details, then moves to the owner card. */
+    private void goToOwnerStep() {
         if (storeName.getText().trim().isEmpty()) {
-            showError("Store name is required.");
+            storeError.setText("Store name is required.");
             return;
         }
-        errorLabel.setText(" ");
+        storeError.setText(" ");
+        showStep(2);
+    }
 
-        JTextField ownerName = new JTextField(20);
-        JTextField ownerUser = new JTextField(20);
-        JPasswordField ownerPass = new JPasswordField(20);
-        JPasswordField ownerConfirm = new JPasswordField(20);
-
-        JPanel form = new JPanel(new GridLayout(0, 1, 0, 6));
-        form.add(new JLabel("Your full name (store owner)"));
-        form.add(ownerName);
-        form.add(new JLabel("Choose a username"));
-        form.add(ownerUser);
-        form.add(new JLabel("Choose a password"));
-        form.add(ownerPass);
-        form.add(new JLabel("Confirm password"));
-        form.add(ownerConfirm);
-
-        int ok = JOptionPane.showConfirmDialog(this, form,
-                "Create the store owner account",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (ok != JOptionPane.OK_OPTION) {
-            return;
-        }
+    /** Validates the owner account, then registers the store + owner. */
+    private void submitOwner() {
         String user = ownerUser.getText().trim();
         String pass = new String(ownerPass.getPassword());
         String confirm = new String(ownerConfirm.getPassword());
         if (user.isEmpty() || pass.isEmpty()) {
-            showError("The owner username and password are required.");
+            ownerError.setForeground(Theme.DANGER);
+            ownerError.setText("The owner username and password are required.");
             return;
         }
         if (!pass.equals(confirm)) {
-            showError("The two passwords do not match.");
+            ownerError.setForeground(Theme.DANGER);
+            ownerError.setText("The two passwords do not match.");
             return;
         }
-        submit(storeName.getText().trim(), storePhone.getText().trim(),
-                storeAddress.getText().trim(), user, pass, ownerName.getText().trim());
-    }
+        ownerError.setForeground(Theme.MUTED);
+        ownerError.setText("Creating your store\u2026");
+        createButton.setEnabled(false);
 
-    /** Registers the store + owner in the cloud and opens the owner dashboard. */
-    private void submit(String name, String phone, String address,
-            String ownerUser, String ownerPass, String ownerName) {
-        errorLabel.setForeground(Theme.MUTED);
-        errorLabel.setText("Creating your store\u2026");
+        final String name = storeName.getText().trim();
+        final String phone = storePhone.getText().trim();
+        final String address = storeAddress.getText().trim();
+        final String fullName = ownerName.getText().trim();
+
         new Thread(() -> {
-            User user = null;
+            User created = null;
             String err = null;
             try {
-                user = CloudAccess.registerStore(context, name, phone, address,
-                        ownerUser, ownerPass, ownerName);
+                created = CloudAccess.registerStore(context, name, phone, address, user, pass, fullName);
             } catch (RuntimeException ex) {
                 err = ex.getMessage();
             }
-            final User result = user;
+            final User result = created;
             final String error = err;
             SwingUtilities.invokeLater(() -> {
                 if (result == null) {
-                    showError(error != null ? "Could not create store: " + error
+                    createButton.setEnabled(true);
+                    ownerError.setForeground(Theme.DANGER);
+                    ownerError.setText(error != null ? "Could not create store: " + error
                             : "Store created online, but local sign-in failed.");
                     return;
                 }
-                // Do NOT remember this freshly-created owner across restarts:
-                // the store is still locked/pending, and auto-logging in as the
-                // owner on every launch would stop the administrator from ever
-                // reaching the admin panel. We sign them in for THIS session
-                // only; the next launch shows the sign-in screen again.
+                // Do NOT remember this freshly-created owner across restarts: the
+                // store is still locked/pending, and auto-logging in as the owner
+                // on every launch would stop the administrator from ever reaching
+                // the admin panel. We sign them in for THIS session only.
                 RememberMe.clear();
                 context.setCurrentUser(result);
                 context.getAuditService().log("REGISTER_STORE", "Created store " + name);
-                JOptionPane.showMessageDialog(this,
-                        "Your store has been created and you are now signed in.\n"
-                                + "It is waiting for administrator activation - you can look\n"
-                                + "around, but settings stay locked until it is activated from\n"
-                                + "the web console.",
-                        "Store created", JOptionPane.INFORMATION_MESSAGE);
+                // Open the owner dashboard. It opens locked, with a "waiting for
+                // administrator activation" banner shown across the top.
                 dispose();
                 LoginFrame.openFrameFor(context, result);
             });
         }, "register-store").start();
-    }
-
-    private void showError(String message) {
-        errorLabel.setForeground(Theme.DANGER);
-        errorLabel.setText(message);
     }
 
     private void backToLogin() {

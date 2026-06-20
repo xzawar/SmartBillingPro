@@ -34,7 +34,7 @@ public final class CloudConfig {
      *
      * <p>Leave it as an empty string to keep the app fully offline by default.</p>
      */
-    public static final String DEFAULT_API_BASE = "https://smartbillingpro.vercel.app";
+    public static final String DEFAULT_API_BASE = "https://your-app.vercel.app";
 
     private CloudConfig() {
     }
