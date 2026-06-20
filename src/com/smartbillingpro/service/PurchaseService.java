@@ -51,6 +51,54 @@ public class PurchaseService {
         });
     }
 
+    /** Delete a purchase order and reverse the stock it had added. */
+    public void delete(int id) {
+        database.tx(conn -> {
+            PurchaseOrder po = purchaseDao.findById(id);
+            if (po == null) {
+                return null;
+            }
+            for (PurchaseOrderItem item : po.getItems()) {
+                productDao.decreaseStock(item.getProductId(), item.getQuantity());
+            }
+            purchaseDao.delete(id);
+            auditService.log("PURCHASE_DELETE", po.getReference());
+            return null;
+        });
+    }
+
+    /**
+     * Update an existing purchase order. The stock added by the old lines is
+     * reversed first, then the new lines are applied so inventory stays correct.
+     */
+    public PurchaseOrder update(PurchaseOrder po) {
+        return database.tx(conn -> {
+            PurchaseOrder existing = purchaseDao.findById(po.getId());
+            if (existing == null) {
+                throw new com.smartbillingpro.repository.DataAccessException("Purchase order not found.");
+            }
+            for (PurchaseOrderItem item : existing.getItems()) {
+                productDao.decreaseStock(item.getProductId(), item.getQuantity());
+            }
+            BigDecimal total = BigDecimal.ZERO;
+            for (PurchaseOrderItem item : po.getItems()) {
+                total = total.add(item.getLineTotal());
+            }
+            po.setReference(existing.getReference());
+            po.setDate(existing.getDate());
+            po.setStatus("Received");
+            po.setTotal(total);
+            purchaseDao.update(po);
+            purchaseDao.replaceItems(po);
+            for (PurchaseOrderItem item : po.getItems()) {
+                productDao.increaseStock(item.getProductId(), item.getQuantity());
+                productDao.updateCostPrice(item.getProductId(), Database.toText(item.getCostPrice()));
+            }
+            auditService.log("PURCHASE_UPDATE", po.getReference());
+            return po;
+        });
+    }
+
     public List<PurchaseOrder> all() {
         return purchaseDao.findAll();
     }

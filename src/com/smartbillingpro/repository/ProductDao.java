@@ -54,6 +54,27 @@ public class ProductDao {
         }
     }
 
+    /**
+     * Load every product for a specific store, ignoring the active session.
+     * Used by the administrator to view another store's inventory and to build
+     * a JSON export of that store's catalogue.
+     */
+    public List<Product> findByStore(int storeId) {
+        List<Product> list = new ArrayList<>();
+        try (PreparedStatement ps = db.connection().prepareStatement(
+                SELECT + " WHERE p.store_id = ? ORDER BY p.name")) {
+            ps.setInt(1, storeId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(map(rs));
+                }
+            }
+            return list;
+        } catch (SQLException e) {
+            throw new DataAccessException("Failed to load products: " + e.getMessage(), e);
+        }
+    }
+
     public List<Product> search(String term) {
         List<Product> list = new ArrayList<>();
         String like = "%" + (term == null ? "" : term) + "%";

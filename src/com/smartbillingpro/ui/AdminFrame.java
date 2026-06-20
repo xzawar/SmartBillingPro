@@ -3,11 +3,14 @@ package com.smartbillingpro.ui;
 import com.smartbillingpro.model.User;
 import com.smartbillingpro.service.AppContext;
 import com.smartbillingpro.ui.components.GradientPanel;
+import com.smartbillingpro.ui.components.NavIcons;
 import com.smartbillingpro.ui.components.RoundedButton;
 import com.smartbillingpro.ui.components.SidebarButton;
 import com.smartbillingpro.ui.panels.StorePanel;
 import com.smartbillingpro.ui.panels.UserPanel;
 import com.smartbillingpro.ui.theme.Theme;
+import com.smartbillingpro.util.LiveSync;
+import com.smartbillingpro.util.RememberMe;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -38,6 +41,7 @@ public class AdminFrame extends JFrame {
     private final JPanel content = new JPanel(cardLayout);
     private final JPanel sidebar = new JPanel();
     private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
+    private final LiveSync liveSync;
     private String currentKey;
 
     public AdminFrame(AppContext context) {
@@ -58,6 +62,11 @@ public class AdminFrame extends JFrame {
 
         registerPanels();
         navigateTo("stores");
+
+        // Refresh the admin console in near real time as stores and accounts
+        // change (for example a store user signing in from the Store app).
+        liveSync = new LiveSync(context.getDatabaseFile(), this::refreshCurrent);
+        liveSync.start();
     }
 
     private JComponent buildTopBar() {
@@ -99,11 +108,11 @@ public class AdminFrame extends JFrame {
     }
 
     private void registerPanels() {
-        addNav("stores", "\uD83C\uDFEC  Stores", new StorePanel(this, context));
-        addNav("users", "\uD83D\uDC65  User Accounts", new UserPanel(this, context));
+        addNav("stores", "stores", "Stores", new StorePanel(this, context));
+        addNav("users", "users", "Store Owners", new UserPanel(this, context));
 
         sidebar.add(Box.createVerticalGlue());
-        JLabel version = new JLabel("Admin \u2022 v3.0");
+        JLabel version = new JLabel("Admin \u2022 v3.1");
         version.setFont(Theme.regular(11));
         version.setForeground(Theme.SIDEBAR_TEXT);
         version.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -111,9 +120,11 @@ public class AdminFrame extends JFrame {
         sidebar.add(version);
     }
 
-    private void addNav(String key, String label, JComponent panel) {
+    private void addNav(String key, String iconName, String label, JComponent panel) {
         content.add(panel, key);
         SidebarButton button = new SidebarButton(label);
+        button.setIcons(NavIcons.get(iconName, 18, Theme.SIDEBAR_TEXT),
+                NavIcons.get(iconName, 18, Color.WHITE));
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
         button.addActionListener(e -> navigateTo(key));
@@ -147,6 +158,8 @@ public class AdminFrame extends JFrame {
         int choice = JOptionPane.showConfirmDialog(this, "Log out of the admin console?",
                 "Confirm Logout", JOptionPane.YES_NO_OPTION);
         if (choice == JOptionPane.YES_OPTION) {
+            liveSync.stop();
+            RememberMe.clear();
             context.getAuditService().log("LOGOUT", "Signed out");
             context.setCurrentUser(null);
             dispose();

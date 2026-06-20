@@ -48,6 +48,20 @@ public class InvoiceDao {
         }
     }
 
+    /** Preview the next invoice number for the current store WITHOUT reserving it. */
+    public String peekNextInvoiceNumber(String prefix) {
+        try (PreparedStatement ps = db.connection().prepareStatement(
+                "SELECT invoice_counter FROM stores WHERE id = ?")) {
+            ps.setInt(1, session.getStoreId());
+            try (ResultSet rs = ps.executeQuery()) {
+                int counter = rs.next() ? rs.getInt(1) : 1000;
+                return (prefix == null || prefix.isEmpty() ? "INV" : prefix) + "-" + (counter + 1);
+            }
+        } catch (SQLException e) {
+            return (prefix == null || prefix.isEmpty() ? "INV" : prefix) + "-0000";
+        }
+    }
+
     public Invoice insert(Invoice inv) {
         String sql = "INSERT INTO invoices (store_id, invoice_number, customer_id, customer_name, customer_phone, " +
                 "customer_address, subtotal, discount, tax_percent, tax_amount, grand_total, amount_paid, change_due, " +

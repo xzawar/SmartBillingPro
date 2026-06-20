@@ -90,6 +90,11 @@ public class InvoiceService {
         });
     }
 
+    /** Preview the next invoice number for the current store (does not reserve it). */
+    public String peekNextInvoiceNumber() {
+        return invoiceDao.peekNextInvoiceNumber(context.getSettings().getInvoicePrefix());
+    }
+
     public List<Invoice> all() {
         return invoiceDao.findAll();
     }

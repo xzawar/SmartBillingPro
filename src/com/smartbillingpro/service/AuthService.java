@@ -27,8 +27,23 @@ public class AuthService {
         return PasswordUtil.verify(password, user.getPasswordHash()) ? user : null;
     }
 
+    /**
+     * Finds an active user by username WITHOUT checking a password. Used only by
+     * the "Remember me" auto-login, where the user already authenticated in a
+     * previous session and chose to stay signed in until they log out.
+     */
+    public User findActiveByUsername(String username) {
+        User user = userDao.findByUsername(username == null ? "" : username.trim());
+        return (user != null && user.isActive()) ? user : null;
+    }
+
     public List<User> listUsers() {
         return userDao.findAll();
+    }
+
+    /** Staff accounts that belong to one store (for the owner's Staff screen and admin drill-down). */
+    public List<User> listUsersForStore(int storeId) {
+        return userDao.findByStore(storeId);
     }
 
     public boolean usernameExists(String username) {

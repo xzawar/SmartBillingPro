@@ -60,6 +60,23 @@ public class UserDao {
         }
     }
 
+    /** All accounts that belong to a single store (used by owners and admin drill-down). */
+    public List<User> findByStore(int storeId) {
+        List<User> list = new ArrayList<>();
+        String sql = "SELECT * FROM users WHERE store_id = ? ORDER BY username";
+        try (PreparedStatement ps = db.connection().prepareStatement(sql)) {
+            ps.setInt(1, storeId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(map(rs));
+                }
+            }
+            return list;
+        } catch (SQLException e) {
+            throw new DataAccessException("Failed to load users: " + e.getMessage(), e);
+        }
+    }
+
     public User insert(User user) {
         String sql = "INSERT INTO users (username, password_hash, full_name, role, store_id, active) " +
                 "VALUES (?, ?, ?, ?, ?, ?)";

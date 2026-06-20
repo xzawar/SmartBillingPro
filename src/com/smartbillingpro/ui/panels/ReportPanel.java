@@ -5,7 +5,7 @@ import com.smartbillingpro.ui.MainFrame;
 import com.smartbillingpro.ui.components.RoundedButton;
 import com.smartbillingpro.ui.components.RoundedPanel;
 import com.smartbillingpro.ui.components.Ui;
-import com.smartbillingpro.ui.dialogs.TextPreviewDialog;
+import com.smartbillingpro.ui.dialogs.ReportPreviewDialog;
 import com.smartbillingpro.ui.theme.Theme;
 import com.smartbillingpro.util.Dates;
 
@@ -103,7 +103,7 @@ public class ReportPanel extends PanelBase {
 
     private void showInventory() {
         String report = context.getReportService().inventoryReport(settings());
-        new TextPreviewDialog(frame, "Inventory Report", report, 76).setVisible(true);
+        new ReportPreviewDialog(frame, settings(), "Inventory Report", report).setVisible(true);
     }
 
     private void showSales() {
@@ -114,7 +114,7 @@ public class ReportPanel extends PanelBase {
             return;
         }
         String report = context.getReportService().salesReport(settings(), from, to);
-        new TextPreviewDialog(frame, "Sales Report", report, 76).setVisible(true);
+        new ReportPreviewDialog(frame, settings(), "Sales Report", report).setVisible(true);
     }
 
     private void showProfit() {
@@ -125,7 +125,7 @@ public class ReportPanel extends PanelBase {
             return;
         }
         String report = context.getReportService().profitReport(settings(), from, to);
-        new TextPreviewDialog(frame, "Profit Report", report, 76).setVisible(true);
+        new ReportPreviewDialog(frame, settings(), "Profit Report", report).setVisible(true);
     }
 
     @Override

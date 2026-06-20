@@ -11,16 +11,22 @@ import com.smartbillingpro.ui.components.StripedTable;
 import com.smartbillingpro.ui.components.Ui;
 import com.smartbillingpro.ui.dialogs.ProductDialog;
 import com.smartbillingpro.ui.theme.Theme;
+import com.smartbillingpro.util.InventoryJson;
 import com.smartbillingpro.util.Money;
 
 import javax.swing.BorderFactory;
+import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -75,8 +81,16 @@ public class InventoryPanel extends PanelBase {
             edit.addActionListener(e -> editSelected());
             RoundedButton delete = new RoundedButton("Delete", Theme.withAlpha(Theme.DANGER, 30), Theme.DANGER);
             delete.addActionListener(e -> deleteSelected());
+            // Import / export the whole catalogue as a JSON file so it can be
+            // moved into a brand-new account.
+            RoundedButton importBtn = new RoundedButton("Import JSON", Theme.withAlpha(Theme.ACCENT, 30), Theme.ACCENT);
+            importBtn.addActionListener(e -> importInventory());
+            RoundedButton exportBtn = new RoundedButton("Export JSON", Theme.withAlpha(Theme.SUCCESS, 30), Theme.SUCCESS);
+            exportBtn.addActionListener(e -> exportInventory());
             bar.add(edit);
             bar.add(delete);
+            bar.add(importBtn);
+            bar.add(exportBtn);
             container.add(bar, BorderLayout.SOUTH);
         }
         setBody(container);
@@ -116,6 +130,65 @@ public class InventoryPanel extends PanelBase {
         if (choice == JOptionPane.YES_OPTION) {
             context.getInventoryService().delete(product);
             reload();
+        }
+    }
+
+    /** Save the whole catalogue to a JSON file the user picks. */
+    private void exportInventory() {
+        List<Product> products = context.getInventoryService().all();
+        if (products.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "There are no products to export yet.");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Export Inventory");
+        chooser.setSelectedFile(new File("inventory.json"));
+        chooser.setFileFilter(new FileNameExtensionFilter("JSON files (*.json)", "json"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File file = chooser.getSelectedFile();
+        if (!file.getName().toLowerCase().endsWith(".json")) {
+            file = new File(file.getParentFile(), file.getName() + ".json");
+        }
+        try {
+            Files.write(file.toPath(), InventoryJson.export(products).getBytes(StandardCharsets.UTF_8));
+            JOptionPane.showMessageDialog(this,
+                    "Exported " + products.size() + " product(s) to:\n" + file.getAbsolutePath());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Could not save the file: " + ex.getMessage(),
+                    "Export Failed", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** Load products from a JSON file and add them to this store's catalogue. */
+    private void importInventory() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Import Inventory");
+        chooser.setFileFilter(new FileNameExtensionFilter("JSON files (*.json)", "json"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File file = chooser.getSelectedFile();
+        try {
+            String json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+            List<Product> products = InventoryJson.parse(json);
+            if (products.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No products were found in that file.");
+                return;
+            }
+            int choice = JOptionPane.showConfirmDialog(this,
+                    "Add " + products.size() + " product(s) from this file to your inventory?",
+                    "Confirm Import", JOptionPane.YES_NO_OPTION);
+            if (choice != JOptionPane.YES_OPTION) {
+                return;
+            }
+            int added = context.getInventoryService().importProducts(products);
+            reload();
+            JOptionPane.showMessageDialog(this, "Imported " + added + " product(s).");
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Could not read the file: " + ex.getMessage(),
+                    "Import Failed", JOptionPane.ERROR_MESSAGE);
         }
     }
 

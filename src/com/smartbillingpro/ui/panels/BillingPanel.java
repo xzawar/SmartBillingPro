@@ -1,6 +1,5 @@
 package com.smartbillingpro.ui.panels;
 
-import com.smartbillingpro.model.Customer;
 import com.smartbillingpro.model.Invoice;
 import com.smartbillingpro.model.InvoiceItem;
 import com.smartbillingpro.model.Product;
@@ -11,12 +10,12 @@ import com.smartbillingpro.ui.components.RoundedButton;
 import com.smartbillingpro.ui.components.RoundedPanel;
 import com.smartbillingpro.ui.components.StripedTable;
 import com.smartbillingpro.ui.components.Ui;
-import com.smartbillingpro.ui.dialogs.PaymentDialog;
-import com.smartbillingpro.ui.dialogs.TextPreviewDialog;
+import com.smartbillingpro.ui.dialogs.InvoicePreviewDialog;
 import com.smartbillingpro.ui.theme.Theme;
 import com.smartbillingpro.util.Money;
 
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -33,17 +32,17 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The point-of-sale screen, organised into three clear cards:
- * <ol>
- *   <li><b>Customer Information</b> &mdash; name, phone, address and cashier.</li>
- *   <li><b>Add Products</b> &mdash; search the catalogue and build the cart.</li>
- *   <li><b>Invoice Summary</b> &mdash; discount, tax, totals and "Generate Invoice".</li>
- * </ol>
+ * The point-of-sale screen. The cashier types in a single search box, the
+ * matching products appear underneath, and a click adds the item straight into
+ * the bill. Quantities are adjusted with the +/\u2212 buttons. The invoice summary
+ * and "Generate Invoice" action sit in a card on the right.
  */
 public class BillingPanel extends PanelBase {
 
@@ -53,20 +52,20 @@ public class BillingPanel extends PanelBase {
     private final JTextField customerAddressField = new JTextField(18);
     private final JTextField cashierField = new JTextField(18);
 
-    // ----- product search + catalogue ----------------------------------------
-    private final DefaultTableModel catalogModel = new DefaultTableModel(
+    // ----- search + live results ---------------------------------------------
+    private final JTextField searchField = new JTextField();
+    private final DefaultTableModel resultModel = new DefaultTableModel(
             new Object[] {"Product", "SKU", "Price", "Stock"}, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
             return false;
         }
     };
-    private final StripedTable catalogTable = new StripedTable(catalogModel);
-    private final JTextField catalogSearch = new JTextField(16);
-    private final JTextField qtyField = new JTextField("1", 4);
-    private final List<Product> catalogRows = new ArrayList<>();
+    private final StripedTable resultTable = new StripedTable(resultModel);
+    private final List<Product> resultRows = new ArrayList<>();
+    private final JLabel resultHint = new JLabel();
 
-    // ----- cart (line items) --------------------------------------------------
+    // ----- bill (line items) --------------------------------------------------
     private final DefaultTableModel cartModel = new DefaultTableModel(
             new Object[] {"#", "Product", "Price", "Qty", "Total"}, 0) {
         @Override
@@ -79,6 +78,7 @@ public class BillingPanel extends PanelBase {
     // ----- invoice summary ----------------------------------------------------
     private final JTextField discountField = new JTextField(8);
     private final JTextField taxField = new JTextField(6);
+    private final JLabel invoiceBadge = new JLabel();
     private final JLabel subtotalLabel = new JLabel();
     private final JLabel discountLabel = new JLabel();
     private final JLabel taxLabel = new JLabel();
@@ -87,7 +87,8 @@ public class BillingPanel extends PanelBase {
     private boolean syncing = false;
 
     public BillingPanel(MainFrame frame, AppContext context) {
-        super(frame, context, "Billing", "Enter the customer's details, add products, then generate the invoice");
+        super(frame, context, "New Sale",
+                "Search an item, click it to add it to the bill, then generate the invoice");
 
         BillingService billing = context.getBillingService();
         if (billing.getTaxPercent().signum() == 0) {
@@ -101,13 +102,13 @@ public class BillingPanel extends PanelBase {
         setBody(layout);
     }
 
-    // ----- left column: customer + products ----------------------------------
+    // ----- left column: customer + add items ---------------------------------
 
     private JComponent buildLeftColumn() {
         JPanel left = new JPanel(new BorderLayout(0, 14));
         left.setOpaque(false);
         left.add(buildCustomerCard(), BorderLayout.NORTH);
-        left.add(buildProductsCard(), BorderLayout.CENTER);
+        left.add(buildBillCard(), BorderLayout.CENTER);
         return left;
     }
 
@@ -139,7 +140,6 @@ public class BillingPanel extends PanelBase {
         return card;
     }
 
-    /** Add a stacked label + field to the two-column customer grid. */
     private void addLabeled(JPanel grid, GridBagConstraints c, int col, int row, String label, JComponent field) {
         JPanel cell = new JPanel(new BorderLayout(0, 4));
         cell.setOpaque(false);
@@ -150,57 +150,53 @@ public class BillingPanel extends PanelBase {
         grid.add(cell, c);
     }
 
-    private RoundedPanel buildProductsCard() {
-        RoundedPanel card = new RoundedPanel(new BorderLayout(0, 10));
-        card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+    private RoundedPanel buildBillCard() {
+        RoundedPanel card = new RoundedPanel(new BorderLayout(0, 12));
+        card.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+        card.add(Ui.title("Add Items", 15), BorderLayout.NORTH);
 
-        JPanel header = new JPanel(new BorderLayout(8, 0));
-        header.setOpaque(false);
-        header.add(Ui.title("Add Products", 15), BorderLayout.WEST);
-        card.add(header, BorderLayout.NORTH);
-
-        // Search + a small results table, then the cart underneath.
-        JPanel center = new JPanel(new BorderLayout(0, 10));
+        JPanel center = new JPanel(new BorderLayout(0, 12));
         center.setOpaque(false);
 
-        JPanel searchRow = new JPanel(new BorderLayout(8, 0));
-        searchRow.setOpaque(false);
-        JLabel glass = Ui.formLabel("Search");
-        searchRow.add(glass, BorderLayout.WEST);
-        Ui.styleField(catalogSearch);
-        catalogSearch.getDocument().addDocumentListener(new DefaultDocListener() {
+        // --- search box + live results ---
+        JPanel searchSection = new JPanel(new BorderLayout(0, 8));
+        searchSection.setOpaque(false);
+
+        JPanel searchWrap = new JPanel(new BorderLayout(0, 6));
+        searchWrap.setOpaque(false);
+        searchWrap.add(Ui.formLabel("Search products by name or SKU"), BorderLayout.NORTH);
+        Ui.styleField(searchField);
+        searchField.setPreferredSize(new Dimension(0, 40));
+        searchField.getDocument().addDocumentListener(new DefaultDocListener() {
             @Override
             public void changed() {
-                reloadCatalog();
+                reloadResults();
             }
         });
-        searchRow.add(catalogSearch, BorderLayout.CENTER);
-        JPanel addControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        addControls.setOpaque(false);
-        addControls.add(Ui.formLabel("Qty"));
-        Ui.styleField(qtyField);
-        qtyField.setPreferredSize(new Dimension(56, 32));
-        addControls.add(qtyField);
-        RoundedButton add = new RoundedButton("Add", Theme.PRIMARY, Color.WHITE);
-        add.addActionListener(e -> addToCart());
-        addControls.add(add);
-        searchRow.add(addControls, BorderLayout.EAST);
-        center.add(searchRow, BorderLayout.NORTH);
+        searchWrap.add(searchField, BorderLayout.CENTER);
+        searchSection.add(searchWrap, BorderLayout.NORTH);
 
-        JPanel tables = new JPanel(new GridLayout(2, 1, 0, 10));
-        tables.setOpaque(false);
+        resultTable.setPreferredScrollableViewportSize(new Dimension(0, 150));
+        resultTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                addSelectedResult();
+            }
+        });
+        resultHint.setFont(Theme.regular(12));
+        resultHint.setForeground(Theme.MUTED);
+        JPanel resultWrap = new JPanel(new BorderLayout(0, 4));
+        resultWrap.setOpaque(false);
+        resultWrap.add(resultHint, BorderLayout.NORTH);
+        resultWrap.add(Ui.scroll(resultTable), BorderLayout.CENTER);
+        searchSection.add(resultWrap, BorderLayout.CENTER);
 
-        catalogTable.setPreferredScrollableViewportSize(new Dimension(0, 120));
-        JPanel catalogWrap = new JPanel(new BorderLayout(0, 4));
-        catalogWrap.setOpaque(false);
-        catalogWrap.add(Ui.formLabel("Search results (double-check stock before adding)"), BorderLayout.NORTH);
-        catalogWrap.add(Ui.scroll(catalogTable), BorderLayout.CENTER);
-
-        JPanel cartWrap = new JPanel(new BorderLayout(0, 4));
-        cartWrap.setOpaque(false);
-        JPanel cartHeader = new JPanel(new BorderLayout(8, 0));
-        cartHeader.setOpaque(false);
-        cartHeader.add(Ui.formLabel("Items in this bill"), BorderLayout.WEST);
+        // --- the bill itself ---
+        JPanel billWrap = new JPanel(new BorderLayout(0, 6));
+        billWrap.setOpaque(false);
+        JPanel billHeader = new JPanel(new BorderLayout(8, 0));
+        billHeader.setOpaque(false);
+        billHeader.add(Ui.formLabel("Items in this bill (use + / \u2212 to change quantity)"), BorderLayout.WEST);
         JPanel lineButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         lineButtons.setOpaque(false);
         RoundedButton minus = new RoundedButton("\u2212", Theme.withAlpha(Theme.MUTED, 30), Theme.TEXT);
@@ -212,14 +208,13 @@ public class BillingPanel extends PanelBase {
         lineButtons.add(minus);
         lineButtons.add(plus);
         lineButtons.add(remove);
-        cartHeader.add(lineButtons, BorderLayout.EAST);
-        cartWrap.add(cartHeader, BorderLayout.NORTH);
-        cartWrap.add(Ui.scroll(cartTable), BorderLayout.CENTER);
+        billHeader.add(lineButtons, BorderLayout.EAST);
+        cartTable.setPreferredScrollableViewportSize(new Dimension(0, 170));
+        billWrap.add(billHeader, BorderLayout.NORTH);
+        billWrap.add(Ui.scroll(cartTable), BorderLayout.CENTER);
 
-        tables.add(catalogWrap);
-        tables.add(cartWrap);
-        center.add(tables, BorderLayout.CENTER);
-
+        center.add(searchSection, BorderLayout.NORTH);
+        center.add(billWrap, BorderLayout.CENTER);
         card.add(center, BorderLayout.CENTER);
         return card;
     }
@@ -228,9 +223,16 @@ public class BillingPanel extends PanelBase {
 
     private JComponent buildSummaryCard() {
         RoundedPanel card = new RoundedPanel(new BorderLayout(0, 14));
-        card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
-        card.setPreferredSize(new Dimension(320, 0));
-        card.add(Ui.title("Invoice Summary", 15), BorderLayout.NORTH);
+        card.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+        card.setPreferredSize(new Dimension(330, 0));
+
+        JPanel head = new JPanel(new BorderLayout());
+        head.setOpaque(false);
+        head.add(Ui.title("Invoice Summary", 15), BorderLayout.WEST);
+        invoiceBadge.setFont(Theme.bold(12));
+        invoiceBadge.setForeground(Theme.ACCENT);
+        head.add(invoiceBadge, BorderLayout.EAST);
+        card.add(head, BorderLayout.NORTH);
 
         JPanel body = new JPanel();
         body.setOpaque(false);
@@ -272,20 +274,19 @@ public class BillingPanel extends PanelBase {
         inputs.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(inputs);
 
-        body.add(javax.swing.Box.createVerticalStrut(8));
+        body.add(Box.createVerticalStrut(8));
         body.add(separator());
-        body.add(javax.swing.Box.createVerticalStrut(8));
+        body.add(Box.createVerticalStrut(8));
 
         subtotalLabel.setFont(Theme.regular(14));
         discountLabel.setFont(Theme.regular(14));
         taxLabel.setFont(Theme.regular(14));
         totalLabel.setFont(Theme.bold(20));
-        totalLabel.setForeground(Theme.PRIMARY);
         for (JLabel label : new JLabel[] {subtotalLabel, discountLabel, taxLabel, totalLabel}) {
             label.setAlignmentX(Component.LEFT_ALIGNMENT);
             label.setForeground(label == totalLabel ? Theme.PRIMARY : Theme.TEXT);
             body.add(label);
-            body.add(javax.swing.Box.createVerticalStrut(6));
+            body.add(Box.createVerticalStrut(6));
         }
 
         card.add(body, BorderLayout.CENTER);
@@ -310,43 +311,37 @@ public class BillingPanel extends PanelBase {
         return line;
     }
 
-    // ----- catalogue / cart actions ------------------------------------------
+    // ----- search / bill actions ---------------------------------------------
 
-    private void addToCart() {
-        int row = catalogTable.getSelectedRow();
-        if (row < 0 || row >= catalogRows.size()) {
-            JOptionPane.showMessageDialog(this, "Select a product from the search results to add.");
-            return;
-        }
-        int qty;
-        try {
-            qty = Integer.parseInt(qtyField.getText().trim());
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Quantity must be a whole number.");
+    private void addSelectedResult() {
+        int row = resultTable.getSelectedRow();
+        if (row < 0 || row >= resultRows.size()) {
             return;
         }
         try {
-            context.getBillingService().addProduct(catalogRows.get(row), qty);
-            qtyField.setText("1");
+            context.getBillingService().addProduct(resultRows.get(row), 1);
             refreshCart();
         } catch (RuntimeException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage());
         }
     }
 
-    private void reloadCatalog() {
-        String term = catalogSearch.getText().trim();
+    private void reloadResults() {
+        String term = searchField.getText().trim();
         List<Product> products = term.isEmpty()
                 ? context.getInventoryService().all()
                 : context.getInventoryService().search(term);
         String symbol = symbol();
-        catalogRows.clear();
-        catalogModel.setRowCount(0);
+        resultRows.clear();
+        resultModel.setRowCount(0);
         for (Product product : products) {
-            catalogRows.add(product);
-            catalogModel.addRow(new Object[] {product.getName(), product.getSku(),
+            resultRows.add(product);
+            resultModel.addRow(new Object[] {product.getName(), product.getSku(),
                     Money.format(symbol, product.getSalePrice()), product.getQuantity()});
         }
+        resultHint.setText(products.isEmpty()
+                ? "No products match your search."
+                : products.size() + " product(s) found \u2014 click one to add it to the bill");
     }
 
     private InvoiceItem selectedItem() {
@@ -419,32 +414,31 @@ public class BillingPanel extends PanelBase {
         String address = customerAddressField.getText().trim();
         billing.setCustomerInfo(name, phone, address);
 
-        // If a phone number is given, remember the customer (and their loyalty
-        // points) by looking them up or creating a new record for this store.
-        Customer customer = null;
-        if (!phone.isEmpty()) {
-            customer = context.getCustomerService().findByPhone(phone);
-            if (customer == null) {
-                Customer fresh = new Customer(name, phone, address);
-                customer = context.getCustomerService().create(fresh);
-            }
-        }
-        billing.setCustomer(customer);
-
-        PaymentDialog dialog = new PaymentDialog(frame, billing.grandTotal(), symbol());
-        dialog.setVisible(true);
-        if (!dialog.isConfirmed()) {
-            return;
-        }
+        // Build the invoice in memory only. No confirm box, no database write,
+        // and no stock change yet – we go straight to the print preview. The sale
+        // is saved (and the customer recorded) ONLY when the user clicks Print.
         String cashier = context.getCurrentUser().getDisplayName();
-        Invoice invoice = billing.buildInvoice(cashier, dialog.getAmountPaid());
-        invoice = context.getInvoiceService().completeSale(invoice);
-        billing.clear();
-        resetCustomerFields();
-        refreshCart();
-        reloadCatalog();
-        String receipt = context.getReportService().receipt(invoice, settings());
-        new TextPreviewDialog(frame, "Invoice " + invoice.getInvoiceNumber(), receipt, 32).setVisible(true);
+        Invoice invoice = billing.buildInvoice(cashier, billing.grandTotal());
+        invoice.setInvoiceNumber(peekInvoiceNumber());
+        invoice.setCreatedAt(com.smartbillingpro.util.Dates.now());
+
+        InvoicePreviewDialog preview = new InvoicePreviewDialog(frame, context, invoice, settings());
+        preview.setVisible(true);
+        if (preview.isCompleted()) {
+            billing.clear();
+            resetCustomerFields();
+            refreshCart();
+            reloadResults();
+            updateInvoiceBadge();
+        }
+    }
+
+    private String peekInvoiceNumber() {
+        try {
+            return context.getInvoiceService().peekNextInvoiceNumber();
+        } catch (RuntimeException ex) {
+            return "(pending)";
+        }
     }
 
     private void clearBill() {
@@ -484,6 +478,14 @@ public class BillingPanel extends PanelBase {
         setSubtitle(billing.totalUnits() + " item(s) in this bill");
     }
 
+    private void updateInvoiceBadge() {
+        try {
+            invoiceBadge.setText("Next: " + context.getInvoiceService().peekNextInvoiceNumber());
+        } catch (RuntimeException ex) {
+            invoiceBadge.setText("");
+        }
+    }
+
     @Override
     public void refreshData() {
         syncing = true;
@@ -491,7 +493,8 @@ public class BillingPanel extends PanelBase {
         taxField.setText(Money.scale(context.getBillingService().getTaxPercent()).toPlainString());
         cashierField.setText(context.getCurrentUser().getDisplayName());
         syncing = false;
-        reloadCatalog();
+        reloadResults();
         refreshCart();
+        updateInvoiceBadge();
     }
 }

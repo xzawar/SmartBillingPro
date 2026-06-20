@@ -7,9 +7,11 @@ import com.smartbillingpro.ui.components.GradientPanel;
 import com.smartbillingpro.ui.components.RoundedButton;
 import com.smartbillingpro.ui.components.RoundedPanel;
 import com.smartbillingpro.ui.theme.Theme;
+import com.smartbillingpro.util.RememberMe;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -18,6 +20,7 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -27,20 +30,41 @@ import java.awt.event.KeyEvent;
 /** The sign-in window shown before the main application opens. */
 public class LoginFrame extends JFrame {
 
+    /** Which kind of accounts a particular launcher accepts. */
+    public enum Mode { ALL, ADMIN_ONLY, STORE_ONLY }
+
     private final AppContext context;
+    private final Mode mode;
     private final JTextField usernameField = new JTextField(18);
     private final JPasswordField passwordField = new JPasswordField(18);
+    private final JCheckBox rememberMe = new JCheckBox("Remember me");
     private final JLabel errorLabel = new JLabel(" ");
 
     public LoginFrame(AppContext context) {
+        this(context, Mode.ALL);
+    }
+
+    public LoginFrame(AppContext context, Mode mode) {
         this.context = context;
-        setTitle("Smart Billing Pro - Sign In");
+        this.mode = mode == null ? Mode.ALL : mode;
+        setTitle("Smart Billing Pro - " + titleForMode());
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(880, 540);
         setMinimumSize(new Dimension(720, 480));
         setLocationRelativeTo(null);
         setContentPane(buildContent());
         getRootPane().setDefaultButton(null);
+    }
+
+    private String titleForMode() {
+        switch (mode) {
+            case ADMIN_ONLY:
+                return "Admin Sign In";
+            case STORE_ONLY:
+                return "Store Sign In";
+            default:
+                return "Sign In";
+        }
     }
 
     private JPanel buildContent() {
@@ -59,7 +83,7 @@ public class LoginFrame extends JFrame {
         inner.setOpaque(false);
         inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
 
-        JLabel logo = new JLabel("\uD83D\uDED2");
+        JLabel logo = new JLabel(mode == Mode.ADMIN_ONLY ? "\uD83D\uDEE1\uFE0F" : "\uD83D\uDED2");
         logo.setFont(Theme.regular(54));
         logo.setAlignmentX(Component.CENTER_ALIGNMENT);
 
@@ -68,7 +92,9 @@ public class LoginFrame extends JFrame {
         title.setForeground(java.awt.Color.WHITE);
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JLabel subtitle = new JLabel("Point of Sale & Inventory");
+        JLabel subtitle = new JLabel(mode == Mode.ADMIN_ONLY
+                ? "Administrator Console"
+                : "Point of Sale & Inventory");
         subtitle.setFont(Theme.regular(14));
         subtitle.setForeground(Theme.GOLD_LIGHT);
         subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -89,7 +115,7 @@ public class LoginFrame extends JFrame {
         RoundedPanel card = new RoundedPanel(new GridBagLayout());
         card.setArc(22);
         card.setBorder(BorderFactory.createEmptyBorder(34, 40, 34, 40));
-        card.setPreferredSize(new Dimension(360, 380));
+        card.setPreferredSize(new Dimension(360, 410));
 
         GridBagConstraints c = new GridBagConstraints();
         c.gridx = 0;
@@ -126,13 +152,22 @@ public class LoginFrame extends JFrame {
         card.add(passwordField, c);
 
         c.gridy++;
-        c.insets = new java.awt.Insets(10, 0, 0, 0);
+        c.insets = new java.awt.Insets(12, 0, 0, 0);
+        rememberMe.setFont(Theme.regular(13));
+        rememberMe.setForeground(Theme.TEXT);
+        rememberMe.setOpaque(false);
+        rememberMe.setFocusPainted(false);
+        rememberMe.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        card.add(rememberMe, c);
+
+        c.gridy++;
+        c.insets = new java.awt.Insets(8, 0, 0, 0);
         errorLabel.setFont(Theme.regular(12));
         errorLabel.setForeground(Theme.DANGER);
         card.add(errorLabel, c);
 
         c.gridy++;
-        c.insets = new java.awt.Insets(16, 0, 0, 0);
+        c.insets = new java.awt.Insets(14, 0, 0, 0);
         RoundedButton signIn = new RoundedButton("Sign In", Theme.PRIMARY, java.awt.Color.WHITE);
         signIn.addActionListener(e -> doLogin());
         card.add(signIn, c);
@@ -147,6 +182,14 @@ public class LoginFrame extends JFrame {
         };
         usernameField.addKeyListener(enter);
         passwordField.addKeyListener(enter);
+
+        // Pre-fill the last remembered username for convenience.
+        String remembered = RememberMe.get();
+        if (remembered != null) {
+            usernameField.setText(remembered);
+            rememberMe.setSelected(true);
+            SwingUtilities.invokeLater(passwordField::requestFocusInWindow);
+        }
 
         wrapper.add(card);
         return wrapper;
@@ -175,20 +218,62 @@ public class LoginFrame extends JFrame {
             passwordField.setText("");
             return;
         }
+        if (!allowed(user, mode)) {
+            errorLabel.setText(mode == Mode.ADMIN_ONLY
+                    ? "This window is for the administrator only."
+                    : "Administrators must use the Admin app.");
+            passwordField.setText("");
+            return;
+        }
+        // Honour the "Remember me" choice: it lasts until an explicit logout.
+        if (rememberMe.isSelected()) {
+            RememberMe.remember(username);
+        } else {
+            RememberMe.clear();
+        }
         context.setCurrentUser(user);
         context.getAuditService().log("LOGIN", "Signed in");
         dispose();
-        SwingUtilities.invokeLater(() -> {
-            if (user.getRole() == Role.ADMIN) {
-                // The administrator only manages stores and staff.
-                AdminFrame admin = new AdminFrame(context);
-                admin.setVisible(true);
-            } else {
-                // Store staff land in the point-of-sale workspace for their store.
-                context.reloadSettings();
-                MainFrame main = new MainFrame(context);
-                main.setVisible(true);
+        SwingUtilities.invokeLater(() -> openFrameFor(context, user));
+    }
+
+    /** Whether a user may sign in through a launcher of the given mode. */
+    static boolean allowed(User user, Mode mode) {
+        if (mode == Mode.ADMIN_ONLY) {
+            return user.getRole() == Role.ADMIN;
+        }
+        if (mode == Mode.STORE_ONLY) {
+            return user.getRole() != Role.ADMIN;
+        }
+        return true;
+    }
+
+    /** Opens the correct workspace for a signed-in user. */
+    static void openFrameFor(AppContext context, User user) {
+        if (user.getRole() == Role.ADMIN) {
+            new AdminFrame(context).setVisible(true);
+        } else {
+            context.reloadSettings();
+            new MainFrame(context).setVisible(true);
+        }
+    }
+
+    /**
+     * Shared entry point for every launcher. If a user is remembered (and is
+     * valid for this launcher's mode) they are signed in automatically and the
+     * login window is skipped; otherwise the login window is shown.
+     */
+    public static void launch(AppContext context, Mode mode) {
+        String remembered = RememberMe.get();
+        if (remembered != null) {
+            User user = context.getAuthService().findActiveByUsername(remembered);
+            if (user != null && allowed(user, mode)) {
+                context.setCurrentUser(user);
+                context.getAuditService().log("LOGIN", "Auto sign-in (remember me)");
+                openFrameFor(context, user);
+                return;
             }
-        });
+        }
+        new LoginFrame(context, mode).setVisible(true);
     }
 }

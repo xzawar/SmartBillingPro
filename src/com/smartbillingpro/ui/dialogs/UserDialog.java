@@ -15,8 +15,9 @@ import java.util.List;
 
 /**
  * Add a staff account, or edit an existing one. Only the administrator uses
- * this. Every account is assigned to a store and given a role (Store Owner,
- * Manager or Cashier); staff in the same store share that store's data.
+ * this. From the admin panel only one account type can be created: the Store
+ * Owner. (Managers and cashiers are created later by the store owner, inside
+ * their own account.) Staff in the same store share that store's data.
  */
 public class UserDialog extends FormDialog {
 
@@ -27,7 +28,7 @@ public class UserDialog extends FormDialog {
     private final JTextField usernameField = new JTextField(16);
     private final JTextField fullNameField = new JTextField(16);
     private final JPasswordField passwordField = new JPasswordField(16);
-    private final JComboBox<Role> roleCombo = new JComboBox<>(new Role[] {Role.OWNER, Role.MANAGER, Role.CASHIER});
+    private final JComboBox<Role> roleCombo = new JComboBox<>(new Role[] {Role.OWNER});
     private final JComboBox<Store> storeCombo = new JComboBox<>();
     private final JCheckBox activeCheck = new JCheckBox("Account is active");
 

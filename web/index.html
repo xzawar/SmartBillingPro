@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Billing Pro - Online</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ============ LOGIN VIEW ============ -->
+  <main id="login-view" class="login-wrap">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-logo">&#128722;</div>
+        <h1>Smart Billing Pro</h1>
+        <p class="muted">Owner / Manager online dashboard</p>
+      </div>
+      <form id="login-form" autocomplete="on">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required />
+
+        <label class="remember">
+          <input id="remember" type="checkbox" checked /> Remember me
+        </label>
+
+        <button type="submit" class="btn-primary">Sign in</button>
+        <p id="login-error" class="error"></p>
+      </form>
+      <p class="hint muted">
+        Set the API address in <code>app.js</code> (the <code>API_BASE</code> value)
+        to your deployed backend - see CLOUD-AND-WEB-GUIDE.md.
+      </p>
+    </div>
+  </main>
+
+  <!-- ============ DASHBOARD VIEW ============ -->
+  <div id="dashboard-view" class="hidden">
+    <header class="topbar">
+      <div class="topbar-title">&#128722; Smart Billing Pro <span class="muted">Online</span></div>
+      <div class="topbar-right">
+        <select id="store-select" class="store-select"></select>
+        <span id="who" class="muted"></span>
+        <button id="refresh-btn" class="btn-ghost">Refresh</button>
+        <button id="logout-btn" class="btn-ghost">Log out</button>
+      </div>
+    </header>
+
+    <section class="cards" id="kpi-cards">
+      <div class="card"><div class="card-label">Today's Sales</div><div class="card-value" id="kpi-sales">-</div></div>
+      <div class="card"><div class="card-label">Invoices Today</div><div class="card-value" id="kpi-invoices">-</div></div>
+      <div class="card"><div class="card-label">Products</div><div class="card-value" id="kpi-products">-</div></div>
+      <div class="card"><div class="card-label">Low Stock</div><div class="card-value warn" id="kpi-lowstock">-</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent Invoices</h2>
+      <table class="data-table">
+        <thead><tr><th>Invoice #</th><th>Date</th><th>Cashier</th><th class="num">Total</th></tr></thead>
+        <tbody id="invoices-body"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Low Stock Items</h2>
+      <table class="data-table">
+        <thead><tr><th>SKU</th><th>Name</th><th>Category</th><th class="num">Qty</th></tr></thead>
+        <tbody id="lowstock-body"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody>
+      </table>
+    </section>
+
+    <footer class="foot muted">
+      Live updates poll every few seconds while the device that runs the shop is online.
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -73,6 +73,19 @@ public enum Role {
         return this == OWNER || this == MANAGER;
     }
 
+    /**
+     * Who is allowed to operate the till and sell items. Owners run the back
+     * office and monitor data, but only managers and cashiers make sales.
+     */
+    public boolean canSell() {
+        return this == MANAGER || this == CASHIER;
+    }
+
+    /** The store owner creates and manages their own managers and cashiers. */
+    public boolean canManageStaff() {
+        return this == OWNER;
+    }
+
     public static Role fromName(String name) {
         if (name != null) {
             for (Role role : values()) {

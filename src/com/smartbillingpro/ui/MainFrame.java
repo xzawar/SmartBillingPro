@@ -4,6 +4,7 @@ import com.smartbillingpro.model.Role;
 import com.smartbillingpro.model.User;
 import com.smartbillingpro.service.AppContext;
 import com.smartbillingpro.ui.components.GradientPanel;
+import com.smartbillingpro.ui.components.NavIcons;
 import com.smartbillingpro.ui.components.RoundedButton;
 import com.smartbillingpro.ui.components.SidebarButton;
 import com.smartbillingpro.ui.panels.BillingPanel;
@@ -14,8 +15,12 @@ import com.smartbillingpro.ui.panels.InventoryPanel;
 import com.smartbillingpro.ui.panels.PurchasePanel;
 import com.smartbillingpro.ui.panels.ReportPanel;
 import com.smartbillingpro.ui.panels.SettingsPanel;
+import com.smartbillingpro.ui.panels.StaffPanel;
 import com.smartbillingpro.ui.panels.SupplierPanel;
 import com.smartbillingpro.ui.theme.Theme;
+import com.smartbillingpro.util.CloudSync;
+import com.smartbillingpro.util.LiveSync;
+import com.smartbillingpro.util.RememberMe;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -41,6 +46,7 @@ public class MainFrame extends JFrame {
     private final JPanel content = new JPanel(cardLayout);
     private final JPanel sidebar = new JPanel();
     private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
+    private final LiveSync liveSync;
     private String currentKey;
 
     public MainFrame(AppContext context) {
@@ -61,6 +67,12 @@ public class MainFrame extends JFrame {
 
         registerPanels();
         navigateTo("dashboard");
+
+        // Keep every open window in sync in near real time: watch the shared
+        // database on a background thread and refresh the visible screen
+        // whenever anything changes (here or in another app/counter).
+        liveSync = new LiveSync(context.getDatabaseFile(), this::refreshCurrent);
+        liveSync.start();
     }
 
     private JComponent buildTopBar() {
@@ -109,26 +121,33 @@ public class MainFrame extends JFrame {
     private void registerPanels() {
         Role role = context.getCurrentUser().getRole();
 
-        addNav("dashboard", "\uD83D\uDCCA  Dashboard", new DashboardPanel(this, context));
-        addNav("billing", "\uD83D\uDED2  New Sale", new BillingPanel(this, context));
-        addNav("inventory", "\uD83D\uDCE6  Inventory", new InventoryPanel(this, context));
-        addNav("customers", "\uD83D\uDC65  Customers", new CustomerPanel(this, context));
+        addNav("dashboard", "dashboard", "Dashboard", new DashboardPanel(this, context));
+        // Only managers and cashiers operate the till. Owners monitor data instead.
+        if (role.canSell()) {
+            addNav("billing", "billing", "New Sale", new BillingPanel(this, context));
+        }
+        addNav("inventory", "inventory", "Inventory", new InventoryPanel(this, context));
+        addNav("customers", "customers", "Customers", new CustomerPanel(this, context));
         if (role.canManageSuppliers()) {
-            addNav("suppliers", "\uD83C\uDFED  Suppliers", new SupplierPanel(this, context));
+            addNav("suppliers", "suppliers", "Suppliers", new SupplierPanel(this, context));
         }
         if (role.canManageInventory()) {
-            addNav("purchases", "\uD83D\uDCE5  Purchases", new PurchasePanel(this, context));
+            addNav("purchases", "purchases", "Purchases", new PurchasePanel(this, context));
         }
-        addNav("history", "\uD83E\uDDFE  Sales History", new HistoryPanel(this, context));
+        // The store owner manages their own managers and cashiers here.
+        if (role.canManageStaff()) {
+            addNav("staff", "staff", "Staff", new StaffPanel(this, context));
+        }
+        addNav("history", "history", "Sales History", new HistoryPanel(this, context));
         if (role.canViewReports()) {
-            addNav("reports", "\uD83D\uDCC8  Reports", new ReportPanel(this, context));
+            addNav("reports", "reports", "Reports", new ReportPanel(this, context));
         }
         if (role.canManageSettings()) {
-            addNav("settings", "\u2699\uFE0F  Settings", new SettingsPanel(this, context));
+            addNav("settings", "settings", "Settings", new SettingsPanel(this, context));
         }
 
         sidebar.add(Box.createVerticalGlue());
-        JLabel version = new JLabel("v3.0");
+        JLabel version = new JLabel("v3.1");
         version.setFont(Theme.regular(11));
         version.setForeground(Theme.SIDEBAR_TEXT);
         version.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -136,9 +155,11 @@ public class MainFrame extends JFrame {
         sidebar.add(version);
     }
 
-    private void addNav(String key, String label, JComponent panel) {
+    private void addNav(String key, String iconName, String label, JComponent panel) {
         content.add(panel, key);
         SidebarButton button = new SidebarButton(label);
+        button.setIcons(NavIcons.get(iconName, 18, Theme.SIDEBAR_TEXT),
+                NavIcons.get(iconName, 18, Color.WHITE));
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
         button.addActionListener(e -> navigateTo(key));
@@ -174,13 +195,50 @@ public class MainFrame extends JFrame {
     private void logout() {
         int choice = JOptionPane.showConfirmDialog(this, "Log out of Smart Billing Pro?",
                 "Confirm Logout", JOptionPane.YES_NO_OPTION);
-        if (choice == JOptionPane.YES_OPTION) {
-            context.getAuditService().log("LOGOUT", "Signed out");
-            context.setCurrentUser(null);
-            context.getBillingService().clear();
-            dispose();
-            LoginFrame login = new LoginFrame(context);
-            login.setVisible(true);
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+        // Offer to back this store's data up to the cloud on the way out.
+        maybeCloudSyncOnLogout();
+        liveSync.stop();
+        // "Remember me" only lasts until an explicit logout.
+        RememberMe.clear();
+        context.getAuditService().log("LOGOUT", "Signed out");
+        context.setCurrentUser(null);
+        context.getBillingService().clear();
+        dispose();
+        LoginFrame login = new LoginFrame(context);
+        login.setVisible(true);
+    }
+
+    /**
+     * When cloud sync is configured, upload this store's database on logout. If
+     * the device is online the upload runs automatically; if not, the user is
+     * offered the choice to try anyway. When cloud sync is not configured this
+     * does nothing, so the app keeps working fully offline.
+     */
+    private void maybeCloudSyncOnLogout() {
+        if (!CloudSync.isConfigured()) {
+            return;
+        }
+        int storeId = context.getCurrentStoreId();
+        java.io.File db = context.getDatabaseFile();
+        boolean online = CloudSync.isOnline();
+        if (!online) {
+            int up = JOptionPane.showConfirmDialog(this,
+                    "No internet connection was detected.\n"
+                            + "Try uploading this store's data to the cloud anyway?",
+                    "Cloud Sync", JOptionPane.YES_NO_OPTION);
+            if (up != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+        try {
+            String msg = CloudSync.upload(db, storeId);
+            JOptionPane.showMessageDialog(this, msg, "Cloud Sync", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Could not upload to the cloud:\n" + ex.getMessage(),
+                    "Cloud Sync", JOptionPane.WARNING_MESSAGE);
         }
     }
 

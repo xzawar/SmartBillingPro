@@ -24,6 +24,27 @@ public class InventoryService {
         return productDao.search(term);
     }
 
+    /** Every product for a specific store, ignoring the active session. */
+    public List<Product> allForStore(int storeId) {
+        return productDao.findByStore(storeId);
+    }
+
+    /** Bulk-add imported products to the current store. Returns how many were added. */
+    public int importProducts(List<Product> products) {
+        int added = 0;
+        for (Product p : products) {
+            if (p == null) {
+                continue;
+            }
+            // Imported products start fresh in this store: no id, no supplier link.
+            p.setId(0);
+            p.setSupplierId(null);
+            productDao.insert(p);
+            added++;
+        }
+        return added;
+    }
+
     public Product findById(int id) {
         return productDao.findById(id);
     }

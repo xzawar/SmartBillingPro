@@ -133,6 +133,51 @@ public class PurchaseDao {
         }
     }
 
+    /** Update the header fields of an existing purchase order. */
+    public void update(PurchaseOrder po) {
+        String sql = "UPDATE purchase_orders SET supplier_id = ?, supplier_name = ?, status = ?, total = ? " +
+                "WHERE id = ? AND store_id = ?";
+        try (PreparedStatement ps = db.connection().prepareStatement(sql)) {
+            ps.setInt(1, po.getSupplierId());
+            ps.setString(2, po.getSupplierName());
+            ps.setString(3, po.getStatus());
+            ps.setString(4, Database.toText(po.getTotal()));
+            ps.setInt(5, po.getId());
+            ps.setInt(6, session.getStoreId());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new DataAccessException("Failed to update purchase order: " + e.getMessage(), e);
+        }
+    }
+
+    /** Replace all line items of a purchase order with the ones it now holds. */
+    public void replaceItems(PurchaseOrder po) {
+        deleteItems(po.getId());
+        insertItems(po);
+    }
+
+    public void deleteItems(int poId) {
+        try (PreparedStatement ps = db.connection().prepareStatement(
+                "DELETE FROM purchase_order_items WHERE po_id = ?")) {
+            ps.setInt(1, poId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new DataAccessException("Failed to delete purchase order items: " + e.getMessage(), e);
+        }
+    }
+
+    public void delete(int poId) {
+        deleteItems(poId);
+        try (PreparedStatement ps = db.connection().prepareStatement(
+                "DELETE FROM purchase_orders WHERE id = ? AND store_id = ?")) {
+            ps.setInt(1, poId);
+            ps.setInt(2, session.getStoreId());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new DataAccessException("Failed to delete purchase order: " + e.getMessage(), e);
+        }
+    }
+
     public int count() {
         try (PreparedStatement ps = db.connection().prepareStatement(
                 "SELECT COUNT(*) FROM purchase_orders WHERE store_id = ?")) {

@@ -50,6 +50,11 @@ public class Database {
         return connection;
     }
 
+    /** The file this database is stored in (for live sync, backup and cloud upload). */
+    public File getDbFile() {
+        return dbFile;
+    }
+
     /** Open the connection, build the schema and seed starter data. */
     public void init() {
         try {

@@ -9,7 +9,7 @@ import com.smartbillingpro.ui.components.RoundedPanel;
 import com.smartbillingpro.ui.components.StatusCellRenderer;
 import com.smartbillingpro.ui.components.StripedTable;
 import com.smartbillingpro.ui.components.Ui;
-import com.smartbillingpro.ui.dialogs.TextPreviewDialog;
+import com.smartbillingpro.ui.dialogs.InvoicePreviewDialog;
 import com.smartbillingpro.ui.theme.Theme;
 import com.smartbillingpro.util.Money;
 
@@ -96,7 +96,8 @@ public class HistoryPanel extends PanelBase {
         }
         Invoice invoice = context.getInvoiceService().load(header.getId());
         String receipt = context.getReportService().receipt(invoice, settings());
-        new TextPreviewDialog(frame, "Receipt " + invoice.getInvoiceNumber(), receipt, 32).setVisible(true);
+        // Use the one shared invoice format everywhere (read-only reprint mode).
+        new InvoicePreviewDialog(frame, invoice, settings(), receipt).setVisible(true);
     }
 
     private void reverse(boolean isVoid) {

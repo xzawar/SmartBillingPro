@@ -14,6 +14,8 @@ import com.smartbillingpro.repository.StoreSession;
 import com.smartbillingpro.repository.SupplierDao;
 import com.smartbillingpro.repository.UserDao;
 
+import java.io.File;
+
 /**
  * Wires the database, DAOs and services together and holds session state
  * (the logged-in user, the active store and the loaded settings).
@@ -152,6 +154,11 @@ public class AppContext {
 
     public void reloadSettings() {
         this.settings = settingsService.load();
+    }
+
+    /** The shared SQLite file - used for live sync and cloud upload. */
+    public File getDatabaseFile() {
+        return database.getDbFile();
     }
 
     public void shutdown() {

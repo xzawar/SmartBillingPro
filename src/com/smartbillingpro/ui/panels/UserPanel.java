@@ -1,5 +1,6 @@
 package com.smartbillingpro.ui.panels;
 
+import com.smartbillingpro.model.Role;
 import com.smartbillingpro.model.Store;
 import com.smartbillingpro.model.User;
 import com.smartbillingpro.service.AppContext;
@@ -10,6 +11,7 @@ import com.smartbillingpro.ui.components.RoundedPanel;
 import com.smartbillingpro.ui.components.StatusCellRenderer;
 import com.smartbillingpro.ui.components.StripedTable;
 import com.smartbillingpro.ui.components.Ui;
+import com.smartbillingpro.ui.dialogs.StoreDetailsDialog;
 import com.smartbillingpro.ui.dialogs.UserDialog;
 import com.smartbillingpro.ui.theme.Theme;
 
@@ -39,7 +41,7 @@ public class UserPanel extends JPanel implements Refreshable {
     private final JLabel subtitle = new JLabel();
 
     private final DefaultTableModel model = new DefaultTableModel(
-            new Object[] {"Username", "Full Name", "Role", "Store", "Status"}, 0) {
+            new Object[] {"Username", "Full Name", "Branch", "Status"}, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
             return false;
@@ -56,7 +58,7 @@ public class UserPanel extends JPanel implements Refreshable {
 
         add(buildHeader(), BorderLayout.NORTH);
 
-        table.getColumnModel().getColumn(4).setCellRenderer(new StatusCellRenderer());
+        table.getColumnModel().getColumn(3).setCellRenderer(new StatusCellRenderer());
         RoundedPanel tableCard = new RoundedPanel(new BorderLayout());
         tableCard.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         tableCard.add(Ui.scroll(table), BorderLayout.CENTER);
@@ -69,6 +71,10 @@ public class UserPanel extends JPanel implements Refreshable {
         RoundedButton edit = new RoundedButton("Edit / Reset Password", Theme.withAlpha(Theme.PRIMARY, 30), Theme.PRIMARY);
         edit.addActionListener(e -> editSelected());
         bar.add(edit);
+        // "Details" opens an owner's store: their staff, inventory and a JSON export.
+        RoundedButton details = new RoundedButton("Details", Theme.withAlpha(Theme.ACCENT, 30), Theme.ACCENT);
+        details.addActionListener(e -> openDetails());
+        bar.add(details);
         container.add(bar, BorderLayout.SOUTH);
         add(container, BorderLayout.CENTER);
     }
@@ -120,6 +126,23 @@ public class UserPanel extends JPanel implements Refreshable {
         openDialog(user);
     }
 
+    /** Drill into a store owner's account: their staff, inventory and export. */
+    private void openDetails() {
+        User user = selected();
+        if (user == null) {
+            JOptionPane.showMessageDialog(this, "Select an owner account to view its details.");
+            return;
+        }
+        if (user.getRole() != Role.OWNER) {
+            JOptionPane.showMessageDialog(this,
+                    "Details are available for store owner accounts only.\n"
+                            + "Select an Owner to see the staff and inventory they manage.");
+            return;
+        }
+        new StoreDetailsDialog(frame, context, user).setVisible(true);
+        reload();
+    }
+
     private void reload() {
         // Build a quick id -> name lookup so we can show each user's store.
         Map<Integer, String> storeNames = new HashMap<>();
@@ -129,15 +152,23 @@ public class UserPanel extends JPanel implements Refreshable {
         List<User> users = context.getAuthService().listUsers();
         rows.clear();
         model.setRowCount(0);
+        int owners = 0;
         for (User user : users) {
+            // The admin console manages store OWNERS only. Each owner then
+            // creates and manages their own managers and cashiers from inside
+            // their store account, so those never appear on this screen.
+            if (user.getRole() != Role.OWNER) {
+                continue;
+            }
             rows.add(user);
+            owners++;
             String storeLabel = user.getStoreId() == 0
                     ? "\u2014"
                     : storeNames.getOrDefault(user.getStoreId(), "(store #" + user.getStoreId() + ")");
             model.addRow(new Object[] {user.getUsername(), user.getFullName(),
-                    user.getRole().getLabel(), storeLabel, user.isActive() ? "Active" : "Disabled"});
+                    storeLabel, user.isActive() ? "Active" : "Disabled"});
         }
-        subtitle.setText(users.size() + " user account(s)");
+        subtitle.setText(owners + " store owner(s)");
     }
 
     @Override

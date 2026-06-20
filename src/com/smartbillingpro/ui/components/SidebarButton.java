@@ -3,6 +3,7 @@ package com.smartbillingpro.ui.components;
 import com.smartbillingpro.ui.theme.Theme;
 
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -14,6 +15,8 @@ import java.awt.RenderingHints;
 public class SidebarButton extends JButton {
 
     private boolean active = false;
+    private Icon normalIcon;
+    private Icon activeIcon;
 
     public SidebarButton(String text) {
         super(text);
@@ -26,11 +29,22 @@ public class SidebarButton extends JButton {
         setOpaque(false);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         setBorder(BorderFactory.createEmptyBorder(12, 24, 12, 14));
+        setIconTextGap(12);
+    }
+
+    /** Set the icon shown when inactive and the one shown when active/selected. */
+    public void setIcons(Icon normal, Icon active) {
+        this.normalIcon = normal;
+        this.activeIcon = active;
+        setIcon(this.active ? activeIcon : normalIcon);
     }
 
     public void setActive(boolean active) {
         this.active = active;
         setForeground(active ? Color.WHITE : Theme.SIDEBAR_TEXT);
+        if (normalIcon != null) {
+            setIcon(active ? activeIcon : normalIcon);
+        }
         repaint();
     }
 

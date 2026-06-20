@@ -29,12 +29,17 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Receive stock from a supplier: pick products, quantities and unit costs. */
+/**
+ * Receive stock from a supplier, or edit an existing purchase order. Pick
+ * products, quantities and unit costs. When editing, the previous stock is
+ * reversed and the new quantities are applied so inventory stays correct.
+ */
 public class PurchaseOrderDialog extends JDialog {
 
     private final AppContext context;
     private final List<PurchaseOrderItem> lines = new ArrayList<>();
     private final List<Product> products;
+    private final PurchaseOrder editing;
 
     private final JComboBox<Supplier> supplierCombo = new JComboBox<>();
     private final JComboBox<Product> productCombo = new JComboBox<>();
@@ -43,11 +48,18 @@ public class PurchaseOrderDialog extends JDialog {
     private final DefaultTableModel model;
     private final JLabel totalLabel = new JLabel();
 
-    private boolean received = false;
+    private boolean saved = false;
 
+    /** Create a brand-new purchase order (receive stock). */
     public PurchaseOrderDialog(Window owner, AppContext context) {
-        super(owner, "Receive Stock", ModalityType.APPLICATION_MODAL);
+        this(owner, context, null);
+    }
+
+    /** Edit an existing purchase order, or create a new one when {@code existing} is null. */
+    public PurchaseOrderDialog(Window owner, AppContext context, PurchaseOrder existing) {
+        super(owner, existing == null ? "Receive Stock" : "Edit Purchase Order", ModalityType.APPLICATION_MODAL);
         this.context = context;
+        this.editing = existing;
         this.products = context.getInventoryService().all();
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
@@ -67,7 +79,9 @@ public class PurchaseOrderDialog extends JDialog {
         GradientPanel header = new GradientPanel(new BorderLayout());
         header.setColors(Theme.PRIMARY, Theme.ACCENT);
         header.setBorder(BorderFactory.createEmptyBorder(14, 20, 14, 20));
-        JLabel heading = new JLabel("Receive Stock from Supplier");
+        JLabel heading = new JLabel(existing == null
+                ? "Receive Stock from Supplier"
+                : "Edit Purchase Order " + existing.getReference());
         heading.setFont(Theme.bold(17));
         heading.setForeground(Color.WHITE);
         header.add(heading, BorderLayout.WEST);
@@ -110,10 +124,11 @@ public class PurchaseOrderDialog extends JDialog {
         buttons.setOpaque(false);
         RoundedButton remove = new RoundedButton("Remove Selected", Theme.withAlpha(Theme.DANGER, 35), Theme.DANGER);
         remove.addActionListener(e -> removeSelected(table.getSelectedRow()));
-        RoundedButton receive = new RoundedButton("Receive Stock", Theme.SUCCESS, Color.WHITE);
-        receive.addActionListener(e -> receive());
+        RoundedButton save = new RoundedButton(editing == null ? "Receive Stock" : "Save Changes",
+                Theme.SUCCESS, Color.WHITE);
+        save.addActionListener(e -> save());
         buttons.add(remove);
-        buttons.add(receive);
+        buttons.add(save);
         footer.add(buttons, BorderLayout.EAST);
 
         JPanel root = new JPanel(new BorderLayout());
@@ -124,7 +139,27 @@ public class PurchaseOrderDialog extends JDialog {
         setContentPane(root);
         setSize(new Dimension(720, 520));
         setLocationRelativeTo(owner);
+
+        if (existing != null) {
+            prefillFrom(existing);
+        }
         refreshTotal();
+    }
+
+    private void prefillFrom(PurchaseOrder order) {
+        for (int i = 0; i < supplierCombo.getItemCount(); i++) {
+            if (supplierCombo.getItemAt(i).getId() == order.getSupplierId()) {
+                supplierCombo.setSelectedIndex(i);
+                break;
+            }
+        }
+        for (PurchaseOrderItem item : order.getItems()) {
+            lines.add(new PurchaseOrderItem(item.getProductId(), item.getProductName(),
+                    item.getQuantity(), item.getCostPrice()));
+            model.addRow(new Object[] {item.getProductName(), item.getQuantity(),
+                    Money.format(symbol(), item.getCostPrice()),
+                    Money.format(symbol(), item.getLineTotal())});
+        }
     }
 
     private void prefillCost() {
@@ -176,31 +211,53 @@ public class PurchaseOrderDialog extends JDialog {
         totalLabel.setText("Order Total:  " + Money.format(symbol(), total));
     }
 
-    private void receive() {
-        Supplier supplier = (Supplier) supplierCombo.getSelectedItem();
-        if (supplier == null) {
-            JOptionPane.showMessageDialog(this, "Please select a supplier.");
-            return;
-        }
+    private void save() {
         if (lines.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Add at least one line before receiving.");
+            JOptionPane.showMessageDialog(this, "Add at least one line before saving.");
             return;
         }
-        PurchaseOrder order = new PurchaseOrder();
-        order.setSupplierId(supplier.getId());
-        order.setSupplierName(supplier.getName());
-        order.setItems(new ArrayList<>(lines));
-        context.getPurchaseService().receive(order);
-        received = true;
-        JOptionPane.showMessageDialog(this, "Stock received and inventory updated.");
-        dispose();
+        // A supplier is optional. If none has been added yet the stock is still
+        // received and simply recorded against a "General Supplier", so a brand
+        // new store can receive stock before setting suppliers up.
+        Supplier supplier = (Supplier) supplierCombo.getSelectedItem();
+        int supplierId = supplier == null ? 0 : supplier.getId();
+        String supplierName = supplier == null ? "General Supplier" : supplier.getName();
+        try {
+            if (editing == null) {
+                PurchaseOrder order = new PurchaseOrder();
+                order.setSupplierId(supplierId);
+                order.setSupplierName(supplierName);
+                order.setItems(new ArrayList<>(lines));
+                context.getPurchaseService().receive(order);
+                JOptionPane.showMessageDialog(this, "Stock received and inventory updated.");
+            } else {
+                editing.setSupplierId(supplierId);
+                editing.setSupplierName(supplierName);
+                editing.setItems(new ArrayList<>(lines));
+                context.getPurchaseService().update(editing);
+                JOptionPane.showMessageDialog(this, "Purchase order updated and inventory adjusted.");
+            }
+            saved = true;
+            dispose();
+        } catch (RuntimeException ex) {
+            // Surface the real reason instead of letting the app crash silently.
+            JOptionPane.showMessageDialog(this,
+                    "Could not save this purchase:\n" + ex.getMessage(),
+                    "Purchase Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private String symbol() {
         return context.getSettings().getCurrencySymbol();
     }
 
+    /** True when the order was received or saved successfully. */
+    public boolean isSaved() {
+        return saved;
+    }
+
+    /** Backwards-compatible alias for {@link #isSaved()}. */
     public boolean isReceived() {
-        return received;
+        return saved;
     }
 }
