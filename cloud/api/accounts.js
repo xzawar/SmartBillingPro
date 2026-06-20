@@ -48,7 +48,7 @@ module.exports = async (req, res) => {
       const { error } = await supabase.from("users").insert({
         id: uuid(), local_id: 0, store_id: storeId, username: String(body.username).trim(),
         password_hash: sha256(body.password), full_name: body.fullName || body.username,
-        role, active: true, deleted: false,
+        role, active: true, deleted: false, updated_at: new Date().toISOString(),
       });
       if (error) return res.status(500).json({ error: error.message });
       return res.status(201).json({ ok: true });
@@ -60,13 +60,13 @@ module.exports = async (req, res) => {
     if (!canManage(tok, target.store_id, target.role)) return res.status(403).json({ error: "Not allowed for your role." });
 
     if (action === "disable" || action === "enable") {
-      const { error } = await supabase.from("users").update({ active: action === "enable" }).eq("id", body.id);
+      const { error } = await supabase.from("users").update({ active: action === "enable", updated_at: new Date().toISOString() }).eq("id", body.id);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ ok: true, active: action === "enable" });
     }
     if (action === "reset") {
       if (!body.password) return res.status(400).json({ error: "New password required." });
-      const { error } = await supabase.from("users").update({ password_hash: sha256(body.password) }).eq("id", body.id);
+      const { error } = await supabase.from("users").update({ password_hash: sha256(body.password), updated_at: new Date().toISOString() }).eq("id", body.id);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ ok: true });
     }

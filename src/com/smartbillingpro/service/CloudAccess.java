@@ -33,8 +33,20 @@ public final class CloudAccess {
         return CloudConfig.isConfigured();
     }
 
-    /** Register a new store + owner in the cloud. Returns the server message. */
-    public static String registerStore(String storeName, String phone, String address,
+    /**
+     * Register a new store + owner in the cloud straight from the desktop app,
+     * then immediately sign the new owner in on this device.
+     *
+     * <p>The cloud creates the store as <em>not activated</em> but returns a
+     * session token right away, so we download the (still-locked) store locally
+     * and log the owner in. Their dashboard opens with a "waiting for activation"
+     * banner and settings stay locked until an administrator activates the store
+     * from the web console; the unlock then arrives automatically on the next
+     * background sync.
+     *
+     * @return the matching local owner {@link User}, ready to open the app.
+     */
+    public static User registerStore(AppContext context, String storeName, String phone, String address,
             String ownerUsername, String ownerPassword, String ownerFullName) {
         CloudClient client = new CloudClient(CloudConfig.apiBase());
         Map<String, Object> store = new LinkedHashMap<>();
@@ -49,8 +61,26 @@ public final class CloudAccess {
         body.put("store", store);
         body.put("owner", owner);
         Map<String, Object> resp = client.post("/api/register-store", body, null);
-        Object msg = resp.get("message");
-        return msg != null ? msg.toString() : "Store registered. Waiting for administrator activation.";
+
+        String token = str(resp.get("token"));
+        String cloudStoreId = str(resp.get("storeId"));
+        if (cloudStoreId == null) {
+            cloudStoreId = str(resp.get("store_id"));
+        }
+
+        // Point this device at the new store BEFORE downloading so every pulled
+        // row lands under the correct local store id.
+        CloudConfig.saveSession(token, cloudStoreId);
+        context.getStoreSession().setStoreId(LOCAL_STORE_ID);
+
+        // Initial download: pulls the new (not-yet-activated) store, its owner
+        // account and a default settings row into the local database.
+        context.getCloudSync().prepareSchema();
+        context.getCloudSync().syncOnce();
+
+        // The owner account now exists locally - authenticate against it so the
+        // app can open straight into the (locked) dashboard.
+        return context.getAuthService().authenticate(ownerUsername, ownerPassword);
     }
 
     /**

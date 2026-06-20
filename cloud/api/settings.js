@@ -30,6 +30,7 @@ module.exports = async (req, res) => {
     const patch = {};
     for (const k of EDITABLE) if (k in body) patch[k] = body[k];
     if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Nothing to update." });
+    patch.updated_at = new Date().toISOString();
     const { error } = await supabase.from("settings").update(patch).eq("store_id", storeId);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ ok: true });

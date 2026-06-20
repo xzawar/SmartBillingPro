@@ -23,10 +23,11 @@ module.exports = async (req, res) => {
     const { data: s } = await supabase.from("stores").select("*").eq("id", user.store_id).maybeSingle();
     store = s || null;
     if (store && !store.enabled) return res.status(403).json({ error: "This store has been disabled by the administrator." });
-    if (store && user.role === "OWNER" && !store.activated) {
-      return res.status(403).json({ error: "Your store is still waiting for administrator activation." });
-    }
   }
+  // Owners (and their staff) may sign in while the store is still waiting for
+  // activation; the dashboard shows a notice and settings stay locked until the
+  // administrator activates the store from the web console.
+  const pending = !!(store && user.role !== "ADMIN" && !store.activated);
 
   // Admin lists every store for the console.
   let stores = [];
@@ -43,6 +44,7 @@ module.exports = async (req, res) => {
     role: user.role,
     store_id: user.store_id || null,
     store: store ? { id: store.id, name: store.name, enabled: store.enabled, activated: store.activated } : null,
+    pending,
     stores,
   });
 };

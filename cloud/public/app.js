@@ -1,229 +1,372 @@
-/* Smart Billing Pro - online dashboard front-end.
- * Talks only to this site's own /api/* functions (which hold the Supabase keys).
- * Roles:
- *   ADMIN  -> Stores console (activate / enable / disable) + Accounts
- *   OWNER  -> Dashboard + Accounts (manager/cashier) + Settings
- *   MANAGER-> Dashboard + Settings (no account management, no inventory edits)
- *   CASHIER-> Dashboard (records only)
- */
+/* Smart Billing Pro - web dashboard logic.
+   Talks to the Vercel API. Styled like the desktop app: a left sidebar of
+   sections plus a gradient top bar. Admins manage stores + accounts; owners and
+   managers see their dashboard and (when activated) settings. */
+
 const API = "/api";
 const POLL_MS = 5000;
 const $ = (id) => document.getElementById(id);
 
-let token = localStorage.getItem("sbp_token") || sessionStorage.getItem("sbp_token") || null;
-let profile = null;
-let stores = [];
+// ---- session state ----
+let token = localStorage.getItem("sbp_token") || sessionStorage.getItem("sbp_token") || "";
+let profile = null;          // { name, role, store_id, pending, stores }
+let currentStoreId = null;   // selected store (admin can switch)
+let activeSection = null;
 let pollTimer = null;
-let activeTab = "dash";
 
-/* ---------- HTTP ---------- */
+// ---- small helpers ----
+function saveToken(t, remember) {
+  token = t;
+  (remember ? localStorage : sessionStorage).setItem("sbp_token", t);
+  (remember ? sessionStorage : localStorage).removeItem("sbp_token");
+}
+function clearToken() {
+  token = "";
+  localStorage.removeItem("sbp_token");
+  sessionStorage.removeItem("sbp_token");
+}
 async function api(path, opts = {}) {
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (token) headers.Authorization = "Bearer " + token;
   const res = await fetch(API + path, Object.assign({}, opts, { headers }));
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 401) { logout(); throw new Error(data.error || "Session expired"); }
-  if (!res.ok) throw new Error(data.error || "Request failed");
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(data.error || ("Request failed (" + res.status + ")"));
   return data;
 }
-const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
-  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const money = (n) => n == null ? "-" : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const curStore = () => $("store-select").value || (stores[0] && stores[0].id) || "";
-
-/* ---------- auth ---------- */
-async function login(username, password, remember) {
-  const data = await api("/login", { method: "POST", body: JSON.stringify({ username, password }) });
-  token = data.token;
-  (remember ? localStorage : sessionStorage).setItem("sbp_token", token);
-  profile = data; stores = data.stores || [];
-  startApp();
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+function money(n) { return (parseFloat(n) || 0).toFixed(2); }
+
+// ---- which sidebar sections each role sees (matches the desktop app) ----
+function sectionsForRole(role) {
+  if (role === "ADMIN") return [
+    { id: "admin", label: "Stores" },
+    { id: "accounts", label: "Accounts" },
+  ];
+  if (role === "OWNER") return [
+    { id: "dash", label: "Dashboard" },
+    { id: "accounts", label: "Accounts" },
+    { id: "settings", label: "Settings" },
+  ];
+  if (role === "MANAGER") return [
+    { id: "dash", label: "Dashboard" },
+    { id: "settings", label: "Settings" },
+  ];
+  return [{ id: "dash", label: "Dashboard" }]; // CASHIER
+}
+
+// =================== LOGIN ===================
+$("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("login-error").textContent = "";
+  const username = $("username").value.trim();
+  const password = $("password").value;
+  const remember = $("remember").checked;
+  try {
+    const data = await api("/login", { method: "POST", body: JSON.stringify({ username, password }) });
+    saveToken(data.token, remember);
+    profile = data;
+    afterLogin();
+  } catch (err) {
+    $("login-error").textContent = err.message;
+  }
+});
+
 function logout() {
-  token = null; profile = null;
-  localStorage.removeItem("sbp_token"); sessionStorage.removeItem("sbp_token");
   if (pollTimer) clearInterval(pollTimer);
+  clearToken();
+  profile = null;
   $("app-view").classList.add("hidden");
   $("login-view").classList.remove("hidden");
 }
+$("logout-btn").addEventListener("click", logout);
+$("refresh-btn").addEventListener("click", () => refreshActive());
 
-/* ---------- shell ---------- */
-function tabsForRole(role) {
-  if (role === "ADMIN") return [["stores", "Stores"], ["accounts", "Accounts"]];
-  if (role === "OWNER") return [["dash", "Dashboard"], ["accounts", "Accounts"], ["settings", "Settings"]];
-  if (role === "MANAGER") return [["dash", "Dashboard"], ["settings", "Settings"]];
-  return [["dash", "Dashboard"]]; // cashier: records only
-}
-function startApp() {
+// =================== AFTER LOGIN: build shell ===================
+function afterLogin() {
   $("login-view").classList.add("hidden");
   $("app-view").classList.remove("hidden");
+
   $("who").textContent = profile.name || "";
   $("role-tag").textContent = profile.role || "";
 
+  // Build sidebar.
+  const nav = $("sidebar-nav");
+  nav.innerHTML = "";
+  const sections = sectionsForRole(profile.role);
+  sections.forEach((s) => {
+    const b = document.createElement("button");
+    b.textContent = s.label;
+    b.dataset.section = s.id;
+    b.addEventListener("click", () => showSection(s.id));
+    nav.appendChild(b);
+  });
+
+  // Store selector (admin only - can drill into any store's dashboard later).
   const sel = $("store-select");
-  if (stores.length > 1) {
-    sel.classList.remove("hidden");
-    sel.innerHTML = stores.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
-    sel.onchange = () => renderTab();
-  } else { sel.classList.add("hidden"); }
-
-  const tabs = tabsForRole(profile.role);
-  activeTab = tabs[0][0];
-  $("tabbar").innerHTML = tabs.map(([k, l]) =>
-    `<button data-tab="${k}">${l}</button>`).join("");
-  Array.from($("tabbar").children).forEach((b) => b.onclick = () => { activeTab = b.dataset.tab; renderTab(); });
-
-  renderTab();
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(() => { if (activeTab === "dash") loadDashboard(); }, POLL_MS);
-}
-function showSection(id) {
-  ["admin-section", "dash-section", "accounts-section", "settings-section"].forEach((s) =>
-    $(s).classList.add("hidden"));
-  $(id).classList.remove("hidden");
-  Array.from($("tabbar").children).forEach((b) => b.classList.toggle("active", b.dataset.tab === activeTab));
-}
-function renderTab() {
-  if (activeTab === "stores") { showSection("admin-section"); loadStores(); }
-  else if (activeTab === "accounts") { showSection("accounts-section"); loadAccounts(); }
-  else if (activeTab === "settings") { showSection("settings-section"); loadSettings(); }
-  else { showSection("dash-section"); loadDashboard(); }
-}
-
-/* ---------- admin: stores ---------- */
-async function loadStores() {
-  try {
-    const { stores: list } = await api("/admin/stores");
-    $("stores-body").innerHTML = list.map((s) => {
-      const status = !s.enabled ? '<span class="badge off">Disabled</span>'
-        : s.activated ? '<span class="badge on">Active</span>'
-        : '<span class="badge pend">Pending</span>';
-      const actions = [];
-      if (!s.activated) actions.push(`<button class="btn-mini go" data-act="activate" data-id="${esc(s.id)}">Activate</button>`);
-      actions.push(s.enabled
-        ? `<button class="btn-mini danger" data-act="disable" data-id="${esc(s.id)}">Disable</button>`
-        : `<button class="btn-mini go" data-act="enable" data-id="${esc(s.id)}">Enable</button>`);
-      return `<tr><td>${esc(s.name)}</td><td>${esc(s.phone || "")}</td><td>${status}</td>`
-        + `<td>${s.owner_pending ? '<span class="muted">awaiting activation</span>' : 'active'}</td>`
-        + `<td>${actions.join("")}</td></tr>`;
-    }).join("") || `<tr><td colspan="5" class="muted">No stores yet.</td></tr>`;
-    Array.from($("stores-body").querySelectorAll("button")).forEach((b) => b.onclick = async () => {
-      await api("/admin/stores", { method: "POST", body: JSON.stringify({ id: b.dataset.id, action: b.dataset.act }) });
-      loadStores();
-    });
-  } catch (e) { $("stores-body").innerHTML = `<tr><td colspan="5" class="error">${esc(e.message)}</td></tr>`; }
-}
-
-/* ---------- dashboard ---------- */
-async function loadDashboard() {
-  try {
-    const q = profile.role === "ADMIN" && curStore() ? `?store=${encodeURIComponent(curStore())}` : "";
-    const s = await api("/summary" + q);
-    $("kpi-sales").textContent = money(s.sales);
-    $("kpi-invoices").textContent = s.invoices ?? "-";
-    $("kpi-products").textContent = s.products ?? "-";
-    $("kpi-lowstock").textContent = s.lowStock ?? "-";
-    $("invoices-body").innerHTML = (s.recentInvoices || []).map((r) =>
-      `<tr><td>${esc(r.number)}</td><td>${esc(r.date || "")}</td><td>${esc(r.cashier || "")}</td><td class="num">${money(r.total)}</td></tr>`
-    ).join("") || `<tr><td colspan="4" class="muted">No invoices.</td></tr>`;
-    $("lowstock-body").innerHTML = (s.lowStockItems || []).map((r) =>
-      `<tr><td>${esc(r.sku)}</td><td>${esc(r.name)}</td><td>${esc(r.category || "")}</td><td class="num">${r.quantity}</td></tr>`
-    ).join("") || `<tr><td colspan="4" class="muted">Nothing low.</td></tr>`;
-  } catch (e) { console.warn(e.message); }
-}
-
-/* ---------- accounts ---------- */
-async function loadAccounts() {
-  try {
-    const { accounts } = await api("/accounts");
-    $("accounts-body").innerHTML = accounts.map((a) =>
-      `<tr><td>${esc(a.username)}</td><td>${esc(a.full_name || "")}</td><td>${esc(a.role)}</td>`
-      + `<td>${a.active ? '<span class="badge on">Active</span>' : '<span class="badge off">Disabled</span>'}</td>`
-      + `<td>${a.role === "ADMIN" ? "" :
-        (a.active ? `<button class="btn-mini danger" data-act="disable" data-id="${esc(a.id)}">Disable</button>`
-                  : `<button class="btn-mini go" data-act="enable" data-id="${esc(a.id)}">Enable</button>`)
-        + `<button class="btn-mini" data-act="reset" data-id="${esc(a.id)}">Reset password</button>`}</td></tr>`
-    ).join("") || `<tr><td colspan="5" class="muted">No accounts.</td></tr>`;
-    Array.from($("accounts-body").querySelectorAll("button")).forEach((b) => b.onclick = () => accountAction(b.dataset.act, b.dataset.id));
-  } catch (e) { $("accounts-body").innerHTML = `<tr><td colspan="5" class="error">${esc(e.message)}</td></tr>`; }
-}
-async function accountAction(action, id) {
-  if (action === "reset") {
-    const pw = prompt("Enter a new password for this account:");
-    if (!pw) return;
-    await api("/accounts", { method: "POST", body: JSON.stringify({ action: "reset", id, password: pw }) });
+  if (profile.role === "OWNER" || profile.role === "MANAGER" || profile.role === "CASHIER") {
+    currentStoreId = profile.store_id;
+    sel.classList.add("hidden");
   } else {
-    await api("/accounts", { method: "POST", body: JSON.stringify({ action, id }) });
+    sel.classList.add("hidden"); // admin uses the Stores tab
   }
-  loadAccounts();
-}
-$("add-account-btn").onclick = () => {
-  const roleOptions = profile.role === "ADMIN"
-    ? `<option value="OWNER">Owner</option><option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option>`
-    : `<option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option>`;
-  openModal("New account", `
-    <label>Username<input id="m-user"/></label>
-    <label>Full name<input id="m-name"/></label>
-    <label>Password<input id="m-pass" type="password"/></label>
-    <label>Role<select id="m-role">${roleOptions}</select></label>`,
-    async () => {
-      const body = { action: "create", username: $("m-user").value.trim(),
-        fullName: $("m-name").value.trim(), password: $("m-pass").value, role: $("m-role").value };
-      if (profile.role === "ADMIN") body.storeId = curStore();
-      await api("/accounts", { method: "POST", body: JSON.stringify(body) });
-      closeModal(); loadAccounts();
-    });
-};
 
-/* ---------- settings ---------- */
+  updatePendingBanner();
+  showSection(sections[0].id);
+
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => refreshActive(true), POLL_MS);
+}
+
+// Show the "waiting for activation" banner + lock settings if pending.
+function updatePendingBanner() {
+  const pending = !!(profile && profile.pending);
+  $("pending-banner").classList.toggle("hidden", !pending);
+}
+
+// =================== SECTION SWITCHING ===================
+const SECTION_EL = {
+  admin: "admin-section", dash: "dash-section",
+  accounts: "accounts-section", settings: "settings-section",
+};
+const SECTION_TITLE = { admin: "Stores", dash: "Dashboard", accounts: "Accounts", settings: "Settings" };
+
+function showSection(id) {
+  activeSection = id;
+  Object.values(SECTION_EL).forEach((el) => $(el).classList.add("hidden"));
+  $(SECTION_EL[id]).classList.remove("hidden");
+  $("top-title").textContent = SECTION_TITLE[id] || "";
+  document.querySelectorAll("#sidebar-nav button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.section === id));
+  refreshActive();
+}
+
+function refreshActive(silent) {
+  if (!activeSection) return;
+  const fn = {
+    admin: loadStores, dash: loadDashboard,
+    accounts: loadAccounts, settings: loadSettings,
+  }[activeSection];
+  if (fn) fn(silent).catch((e) => { if (!silent) alert(e.message); });
+}
+
+// =================== ADMIN: STORES ===================
+async function loadStores() {
+  const data = await api("/admin/stores");
+  const body = $("stores-body");
+  const rows = data.stores || [];
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="muted">No stores yet. Click "New store" to add one.</td></tr>'; return; }
+  body.innerHTML = rows.map((s) => {
+    let status, actions;
+    if (!s.enabled) {
+      status = '<span class="badge off">Disabled</span>';
+      actions = btn("enable-store", s.id, "Enable", "go");
+    } else if (!s.activated) {
+      status = '<span class="badge pend">Waiting activation</span>';
+      actions = btn("activate-store", s.id, "Activate", "go") + btn("disable-store", s.id, "Disable", "danger");
+    } else {
+      status = '<span class="badge on">Active</span>';
+      actions = btn("disable-store", s.id, "Disable", "danger");
+    }
+    const owner = s.owner_pending ? '<span class="muted">pending owner</span>' : "";
+    return "<tr><td>" + esc(s.name) + "</td><td>" + esc(s.phone || "-") + "</td><td>" +
+      status + "</td><td>" + owner + "</td><td>" + actions + "</td></tr>";
+  }).join("");
+}
+function btn(action, id, label, cls) {
+  return '<button class="btn-mini ' + (cls || "") + '" data-action="' + action + '" data-id="' + esc(id) + '">' + label + "</button>";
+}
+
+// Delegated clicks for store action buttons.
+$("stores-body").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-action]");
+  if (!b) return;
+  const map = { "enable-store": "enable", "disable-store": "disable", "activate-store": "activate" };
+  const action = map[b.dataset.action];
+  if (!action) return;
+  if (action === "disable" && !confirm("Disable this store? All its accounts will be blocked from signing in.")) return;
+  try {
+    await api("/admin/stores", { method: "POST", body: JSON.stringify({ action, id: b.dataset.id }) });
+    loadStores();
+  } catch (err) { alert(err.message); }
+});
+
+// New store (admin) modal.
+$("add-store-btn").addEventListener("click", () => {
+  openModal("New store", `
+    <label>Store name<input id="f-store-name" type="text" /></label>
+    <label>Phone<input id="f-store-phone" type="text" /></label>
+    <label>Address<input id="f-store-address" type="text" /></label>
+  `, async () => {
+    const name = $("f-store-name").value.trim();
+    if (!name) throw new Error("Store name is required.");
+    await api("/admin/stores", { method: "POST", body: JSON.stringify({
+      action: "create", name, phone: $("f-store-phone").value.trim(), address: $("f-store-address").value.trim(),
+    }) });
+    loadStores();
+  });
+});
+
+// =================== DASHBOARD ===================
+async function loadDashboard() {
+  const storeId = currentStoreId || profile.store_id;
+  const q = profile.role === "ADMIN" && storeId ? ("?store=" + encodeURIComponent(storeId)) : "";
+  const d = await api("/summary" + q);
+  $("kpi-sales").textContent = money(d.sales);
+  $("kpi-invoices").textContent = d.invoices;
+  $("kpi-products").textContent = d.products;
+  $("kpi-lowstock").textContent = d.lowStock;
+  $("invoices-body").innerHTML = (d.recentInvoices || []).length
+    ? d.recentInvoices.map((r) => "<tr><td>" + esc(r.number) + "</td><td>" +
+        esc((r.date || "").slice(0, 16).replace("T", " ")) + "</td><td>" + esc(r.cashier || "-") +
+        '</td><td class="num">' + money(r.total) + "</td></tr>").join("")
+    : '<tr><td colspan="4" class="muted">No invoices yet.</td></tr>';
+  $("lowstock-body").innerHTML = (d.lowStockItems || []).length
+    ? d.lowStockItems.map((p) => "<tr><td>" + esc(p.sku) + "</td><td>" + esc(p.name) + "</td><td>" +
+        esc(p.category || "-") + '</td><td class="num">' + (p.quantity || 0) + "</td></tr>").join("")
+    : '<tr><td colspan="4" class="muted">Nothing low on stock.</td></tr>';
+}
+
+// =================== ACCOUNTS ===================
+let storesCache = [];  // for the account modal's store dropdown (admin)
+async function loadAccounts() {
+  const d = await api("/accounts");
+  const rows = d.accounts || [];
+  // Build a quick id->name lookup for the Store column (admin view).
+  let nameById = {};
+  if (profile.role === "ADMIN") {
+    try { const sd = await api("/admin/stores"); storesCache = sd.stores || []; storesCache.forEach((s) => (nameById[s.id] = s.name)); } catch (e) {}
+  }
+  $("accounts-body").innerHTML = rows.length
+    ? rows.map((a) => {
+        const status = a.active ? '<span class="badge on">Active</span>' : '<span class="badge off">Disabled</span>';
+        const storeName = a.role === "ADMIN" ? "-" : (nameById[a.store_id] || (profile.role === "OWNER" ? "(your store)" : "-"));
+        let actions = "";
+        if (a.role !== "ADMIN") {
+          actions = (a.active ? btn("acc-disable", a.id, "Disable", "danger") : btn("acc-enable", a.id, "Enable", "go")) +
+            btn("acc-reset", a.id, "Reset pw", "");
+        }
+        return "<tr><td>" + esc(a.username) + "</td><td>" + esc(a.full_name || "-") + "</td><td>" +
+          esc(a.role) + "</td><td>" + esc(storeName) + "</td><td>" + status + "</td><td>" + actions + "</td></tr>";
+      }).join("")
+    : '<tr><td colspan="6" class="muted">No accounts yet.</td></tr>';
+}
+
+$("accounts-body").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-action]");
+  if (!b) return;
+  const id = b.dataset.id;
+  try {
+    if (b.dataset.action === "acc-disable") await api("/accounts", { method: "POST", body: JSON.stringify({ action: "disable", id }) });
+    else if (b.dataset.action === "acc-enable") await api("/accounts", { method: "POST", body: JSON.stringify({ action: "enable", id }) });
+    else if (b.dataset.action === "acc-reset") {
+      const pw = prompt("New password for this account:");
+      if (!pw) return;
+      await api("/accounts", { method: "POST", body: JSON.stringify({ action: "reset", id, password: pw }) });
+    }
+    loadAccounts();
+  } catch (err) { alert(err.message); }
+});
+
+// New account modal: admin must PICK a store + role; owners add staff to own store.
+$("add-account-btn").addEventListener("click", async () => {
+  // Make sure we have the store list for admins.
+  let storeOptions = "";
+  if (profile.role === "ADMIN") {
+    try { const sd = await api("/admin/stores"); storesCache = (sd.stores || []).filter((s) => s.enabled); } catch (e) {}
+    if (!storesCache.length) { alert("Create a store first, then add accounts to it."); return; }
+    storeOptions = storesCache.map((s) => '<option value="' + esc(s.id) + '">' + esc(s.name) + "</option>").join("");
+  }
+  const roleOptions = profile.role === "ADMIN"
+    ? '<option value="OWNER">Owner</option><option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option>'
+    : '<option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option>';
+  const storeField = profile.role === "ADMIN"
+    ? '<label>Store<select id="f-acc-store">' + storeOptions + "</select></label>"
+    : "";
+  openModal("New account", `
+    <label>Username<input id="f-acc-user" type="text" /></label>
+    <label>Full name<input id="f-acc-name" type="text" /></label>
+    <label>Password<input id="f-acc-pass" type="password" /></label>
+    <label>Role<select id="f-acc-role">` + roleOptions + `</select></label>
+    ` + storeField + `
+  `, async () => {
+    const username = $("f-acc-user").value.trim();
+    const password = $("f-acc-pass").value;
+    if (!username || !password) throw new Error("Username and password are required.");
+    const payload = {
+      action: "create", username, password,
+      fullName: $("f-acc-name").value.trim(), role: $("f-acc-role").value,
+    };
+    if (profile.role === "ADMIN") payload.storeId = $("f-acc-store").value;
+    await api("/accounts", { method: "POST", body: JSON.stringify(payload) });
+    loadAccounts();
+  });
+});
+
+// =================== SETTINGS ===================
 const SETTING_FIELDS = [
-  ["business_name", "Business name"], ["phone", "Phone"], ["address", "Address"],
-  ["invoice_prefix", "Invoice prefix"], ["currency_symbol", "Currency symbol"],
-  ["default_tax_percent", "Default tax %"], ["low_stock_threshold", "Low stock threshold"],
-  ["return_policy_days", "Return policy days"], ["loyalty_points_per_100", "Loyalty pts / 100"],
-  ["footer_message", "Receipt footer"],
+  ["business_name", "Business name"], ["address", "Address"], ["phone", "Phone"],
+  ["invoice_prefix", "Invoice prefix"], ["default_tax_percent", "Tax %"],
+  ["currency_symbol", "Currency symbol"], ["footer_message", "Receipt footer"],
+  ["low_stock_threshold", "Low-stock threshold"], ["return_policy_days", "Return policy (days)"],
+  ["loyalty_points_per_100", "Loyalty points / 100"],
 ];
 async function loadSettings() {
-  try {
-    const q = profile.role === "ADMIN" && curStore() ? `?store=${encodeURIComponent(curStore())}` : "";
-    const { settings } = await api("/settings" + q);
-    const s = settings || {};
-    $("settings-form").innerHTML = SETTING_FIELDS.map(([k, l]) =>
-      `<label>${l}<input id="set-${k}" value="${esc(s[k] == null ? "" : s[k])}"/></label>`).join("");
-    $("settings-msg").textContent = "";
-  } catch (e) { $("settings-form").innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+  const storeId = currentStoreId || profile.store_id;
+  const q = profile.role === "ADMIN" && storeId ? ("?store=" + encodeURIComponent(storeId)) : "";
+  const d = await api("/settings" + q);
+  const s = d.settings || {};
+  const locked = !!(profile && profile.pending);   // store waiting for activation
+  const form = $("settings-form");
+  form.innerHTML = SETTING_FIELDS.map(([k, label]) =>
+    "<label>" + esc(label) + '<input data-key="' + k + '" value="' + esc(s[k] == null ? "" : s[k]) + '" ' +
+    (locked ? "disabled" : "") + " /></label>").join("");
+  $("save-settings-btn").disabled = locked;
+  $("settings-msg").textContent = locked
+    ? "Settings are locked until an administrator activates your store."
+    : "";
 }
-$("save-settings-btn").onclick = async () => {
-  const body = {};
-  if (profile.role === "ADMIN") body.store = curStore();
-  SETTING_FIELDS.forEach(([k]) => { body[k] = $("set-" + k) ? $("set-" + k).value : undefined; });
-  try { await api("/settings" + (profile.role === "ADMIN" && curStore() ? `?store=${encodeURIComponent(curStore())}` : ""),
-    { method: "POST", body: JSON.stringify(body) });
+$("save-settings-btn").addEventListener("click", async () => {
+  if (profile && profile.pending) { alert("Settings are locked until an administrator activates your store."); return; }
+  const payload = {};
+  document.querySelectorAll("#settings-form input[data-key]").forEach((i) => (payload[i.dataset.key] = i.value));
+  if (profile.role === "ADMIN" && currentStoreId) payload.store = currentStoreId;
+  try {
+    await api("/settings", { method: "POST", body: JSON.stringify(payload) });
     $("settings-msg").textContent = "Saved.";
-  } catch (e) { $("settings-msg").textContent = e.message; }
-};
+    setTimeout(() => ($("settings-msg").textContent = ""), 2000);
+  } catch (err) { alert(err.message); }
+});
 
-/* ---------- modal ---------- */
+// =================== MODAL ===================
 let modalOk = null;
-function openModal(title, html, onOk) {
-  $("modal-title").textContent = title; $("modal-body").innerHTML = html;
-  $("modal-error").textContent = ""; modalOk = onOk; $("modal").classList.remove("hidden");
+function openModal(title, bodyHtml, onOk) {
+  $("modal-title").textContent = title;
+  $("modal-body").innerHTML = bodyHtml;
+  $("modal-error").textContent = "";
+  modalOk = onOk;
+  $("modal").classList.remove("hidden");
 }
 function closeModal() { $("modal").classList.add("hidden"); modalOk = null; }
-$("modal-cancel").onclick = closeModal;
-$("modal-ok").onclick = async () => { try { if (modalOk) await modalOk(); } catch (e) { $("modal-error").textContent = e.message; } };
-
-/* ---------- wire up ---------- */
-$("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault(); $("login-error").textContent = "";
-  try { await login($("username").value.trim(), $("password").value, $("remember").checked); }
-  catch (err) { $("login-error").textContent = err.message; }
+$("modal-cancel").addEventListener("click", closeModal);
+$("modal-ok").addEventListener("click", async () => {
+  if (!modalOk) return closeModal();
+  try { await modalOk(); closeModal(); }
+  catch (err) { $("modal-error").textContent = err.message; }
 });
-$("logout-btn").onclick = logout;
-$("refresh-btn").onclick = renderTab;
 
-// Restore a remembered session.
-if (token) {
-  api("/me").then((data) => { profile = data; stores = data.stores || []; startApp(); })
-    .catch(() => logout());
-}
+// =================== STARTUP: restore remembered session ===================
+(async function init() {
+  if (!token) return;
+  try {
+    const me = await api("/me");
+    profile = me;
+    profile.token = token;
+    afterLogin();
+  } catch (e) {
+    clearToken();
+  }
+})();

@@ -399,6 +399,13 @@ public class SupabaseSync {
             names.add(col);
             values.add(row.get(col));
         }
+        // A store carries its unlock state in two cloud flags (enabled + activated).
+        // Map them to the single local "active" column so the desktop app locks or
+        // unlocks itself the moment an admin activates the store from the web.
+        if (table.equals("stores")) {
+            names.add("active");
+            values.add(storeActive(row) ? 1 : 0);
+        }
         // Re-create parent links from the parent's local id.
         if (table.equals("invoice_items")) {
             Integer pid = localIdForUuid(c, "invoices", str(row.get("invoice_uuid")));
@@ -431,6 +438,10 @@ public class SupabaseSync {
             sb.append(", ").append(col).append(" = ?");
             values.add(row.get(col));
         }
+        if (table.equals("stores")) {
+            sb.append(", active = ?");
+            values.add(storeActive(row) ? 1 : 0);
+        }
         sb.append(" WHERE rowid = ?");
         values.add(rowid);
         try (PreparedStatement ps = c.prepareStatement(sb.toString())) {
@@ -440,6 +451,25 @@ public class SupabaseSync {
     }
 
     // ---------------- helpers ----------------
+
+    /** A store is usable locally only when it is both enabled and activated. */
+    private boolean storeActive(Map<String, Object> row) {
+        Object en = row.get("enabled");
+        Object ac = row.get("activated");
+        boolean enabled = en == null || truthy(en);
+        boolean activated = truthy(ac);
+        return enabled && activated;
+    }
+
+    private boolean truthy(Object o) {
+        if (o instanceof Boolean) {
+            return (Boolean) o;
+        }
+        if (o instanceof Number) {
+            return ((Number) o).intValue() != 0;
+        }
+        return o != null && "true".equalsIgnoreCase(o.toString());
+    }
 
     private void bind(PreparedStatement ps, List<Object> values) throws SQLException {
         for (int i = 0; i < values.size(); i++) {
