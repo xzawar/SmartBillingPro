@@ -1,0 +1,64 @@
+package com.smartbillingpro.service;
+
+import com.smartbillingpro.model.Role;
+import com.smartbillingpro.model.User;
+import com.smartbillingpro.repository.UserDao;
+import com.smartbillingpro.util.PasswordUtil;
+
+import java.util.List;
+
+/** Handles login and staff account management. */
+public class AuthService {
+
+    private final UserDao userDao;
+    private final AuditService auditService;
+
+    public AuthService(UserDao userDao, AuditService auditService) {
+        this.userDao = userDao;
+        this.auditService = auditService;
+    }
+
+    /** Returns the matching active user, or null when credentials are wrong. */
+    public User authenticate(String username, String password) {
+        User user = userDao.findByUsername(username == null ? "" : username.trim());
+        if (user == null || !user.isActive()) {
+            return null;
+        }
+        return PasswordUtil.verify(password, user.getPasswordHash()) ? user : null;
+    }
+
+    public List<User> listUsers() {
+        return userDao.findAll();
+    }
+
+    public boolean usernameExists(String username) {
+        return userDao.findByUsername(username == null ? "" : username.trim()) != null;
+    }
+
+    public int userCount() {
+        return userDao.count();
+    }
+
+    public User createUser(String username, String password, Role role, String fullName, int storeId) {
+        User user = new User();
+        user.setUsername(username.trim());
+        user.setPasswordHash(PasswordUtil.hash(password));
+        user.setRole(role);
+        user.setFullName(fullName);
+        user.setStoreId(storeId);
+        user.setActive(true);
+        userDao.insert(user);
+        auditService.log("USER_CREATE", user.getUsername());
+        return user;
+    }
+
+    public void updateUser(User user) {
+        userDao.update(user);
+        auditService.log("USER_UPDATE", user.getUsername());
+    }
+
+    public void resetPassword(User user, String newPassword) {
+        userDao.updatePassword(user.getId(), PasswordUtil.hash(newPassword));
+        auditService.log("USER_PASSWORD", user.getUsername());
+    }
+}

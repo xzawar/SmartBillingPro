@@ -1,0 +1,59 @@
+==============================================================
+  Smart Billing Pro - How to create a Windows .exe
+==============================================================
+
+WHY THIS IS NOT ALREADY AN .EXE
+-------------------------------
+The app is written in Java. A Windows .exe is built FROM the Java
+code on a Windows PC using the official Java packaging tool
+(jpackage). It cannot be produced where the code was written, so
+you run two small scripts once on your own machine and you get a
+proper .exe that bundles its own Java runtime.
+
+
+WHAT YOU NEED (one-time)
+------------------------
+1. A full JDK, version 17 or newer (NOT just a "JRE").
+   - Free download: https://adoptium.net  (Temurin 17 or 21, .msi)
+   - During install, leave "Add to PATH" enabled.
+   - Check it worked: open Command Prompt and run:  javac -version
+2. The SQLite driver jar in the lib\ folder
+   (sqlite-jdbc-3.45.x.x.jar). It should already be there from
+   before; if not, download it from:
+   https://github.com/xerial/sqlite-jdbc/releases
+
+
+STEPS
+-----
+1. Double-click  build-jar.bat
+      -> compiles the code and creates SmartBillingPro.jar
+      (it also bundles the SQLite driver inside the jar)
+
+2. Double-click  make-exe.bat
+      -> creates:  app-image\SmartBillingPro\SmartBillingPro.exe
+
+3. Open the app-image\SmartBillingPro folder and double-click
+   SmartBillingPro.exe to run it.
+
+That SmartBillingPro folder is fully self-contained: you can copy
+it to any Windows PC (even one without Java) and the .exe will run.
+
+
+WANT A SINGLE-FILE INSTALLER INSTEAD? (optional)
+------------------------------------------------
+To build a classic Setup.exe / .msi installer, install the free
+"WiX Toolset v3" (https://wixtoolset.org), then in make-exe.bat
+change:
+      --type app-image
+to:
+      --type exe        (or  --type msi)
+and run it again. The installer will appear in the app-image folder.
+
+
+DATA / LOGIN
+------------
+- The database lives at:  C:\Users\<you>\.smartbillingpro\shoppro.db
+- First login:  admin / admin123
+  (Admin only manages Stores and Users. Create a Store, then a
+   Store Owner account, then log in as that owner to sell and to
+   manage inventory.)
