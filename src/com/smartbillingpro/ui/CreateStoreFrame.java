@@ -1,5 +1,6 @@
 package com.smartbillingpro.ui;
 
+import com.smartbillingpro.model.Role;
 import com.smartbillingpro.model.User;
 import com.smartbillingpro.service.AppContext;
 import com.smartbillingpro.service.CloudAccess;
@@ -306,7 +307,17 @@ public class CreateStoreFrame extends JFrame {
         showStep(2);
     }
 
-    /** Validates the owner account, then registers the store + owner. */
+    /**
+     * Validates the owner account, then jumps STRAIGHT into the owner dashboard.
+     *
+     * <p>Instead of waiting for the network, we sign the owner in locally with a
+     * temporary account so their dashboard opens instantly - fully locked, with
+     * the "waiting for administrator activation" banner. The real cloud
+     * registration then runs on a background thread; when it finishes the screen
+     * quietly swaps to the saved account, and the whole app unlocks itself the
+     * moment an administrator activates the store online (the background sync
+     * checks every few seconds and updates the screen in place).
+     */
     private void submitOwner() {
         String user = ownerUser.getText().trim();
         String pass = new String(ownerPass.getPassword());
@@ -321,15 +332,26 @@ public class CreateStoreFrame extends JFrame {
             ownerError.setText("The two passwords do not match.");
             return;
         }
-        ownerError.setForeground(Theme.MUTED);
-        ownerError.setText("Creating your store\u2026");
-        createButton.setEnabled(false);
 
         final String name = storeName.getText().trim();
         final String phone = storePhone.getText().trim();
         final String address = storeAddress.getText().trim();
         final String fullName = ownerName.getText().trim();
+        final String ownerLabel = fullName.isEmpty() ? user : fullName;
 
+        // Sign in locally with a temporary owner so the dashboard can open NOW.
+        // We never remember this pending owner across restarts, or auto-login
+        // would stop the administrator from ever reaching the admin panel.
+        User optimistic = new User(0, user, ownerLabel, Role.OWNER, true);
+        optimistic.setStoreId(CloudAccess.LOCAL_STORE_ID);
+        RememberMe.clear();
+        context.setCurrentUser(optimistic);
+
+        MainFrame frame = new MainFrame(context, true);
+        frame.setVisible(true);
+        dispose();
+
+        // Register the store + owner in the cloud on a background thread.
         new Thread(() -> {
             User created = null;
             String err = null;
@@ -342,23 +364,12 @@ public class CreateStoreFrame extends JFrame {
             final String error = err;
             SwingUtilities.invokeLater(() -> {
                 if (result == null) {
-                    createButton.setEnabled(true);
-                    ownerError.setForeground(Theme.DANGER);
-                    ownerError.setText(error != null ? "Could not create store: " + error
-                            : "Store created online, but local sign-in failed.");
-                    return;
+                    frame.onStoreRegistrationFailed(error);
+                } else {
+                    context.setCurrentUser(result);
+                    context.getAuditService().log("REGISTER_STORE", "Created store " + name);
+                    frame.onStoreRegistered();
                 }
-                // Do NOT remember this freshly-created owner across restarts: the
-                // store is still locked/pending, and auto-logging in as the owner
-                // on every launch would stop the administrator from ever reaching
-                // the admin panel. We sign them in for THIS session only.
-                RememberMe.clear();
-                context.setCurrentUser(result);
-                context.getAuditService().log("REGISTER_STORE", "Created store " + name);
-                // Open the owner dashboard. It opens locked, with a "waiting for
-                // administrator activation" banner shown across the top.
-                dispose();
-                LoginFrame.openFrameFor(context, result);
             });
         }, "register-store").start();
     }

@@ -49,9 +49,20 @@ public class MainFrame extends JFrame {
     private final LiveSync liveSync;
     private String currentKey;
     private JPanel activationBanner;
+    private boolean forcePending;
 
     public MainFrame(AppContext context) {
+        this(context, false);
+    }
+
+    /**
+     * @param pending when true the window opens fully locked (only the dashboard
+     *                preview is usable) with the "waiting for activation" banner.
+     *                Used right after a new store is created from the login screen.
+     */
+    public MainFrame(AppContext context, boolean pending) {
         this.context = context;
+        this.forcePending = pending;
         setTitle("Smart Billing Pro");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(1240, 760);
@@ -73,6 +84,8 @@ public class MainFrame extends JFrame {
 
         registerPanels();
         navigateTo("dashboard");
+        // Lock the whole app if this store is still waiting for activation.
+        setLocked(storePending());
 
         // Keep every open window in sync in near real time: watch the shared
         // database on a background thread and refresh the visible screen
@@ -193,10 +206,10 @@ public class MainFrame extends JFrame {
 
     /** Re-runs refresh on the panel that is currently visible. */
     public void refreshCurrent() {
-        if (activationBanner != null) {
-            // Hide the banner automatically once the administrator activates the store.
-            activationBanner.setVisible(storePending());
-        }
+        // Lock or unlock the whole app depending on whether the store has been
+        // activated yet. This makes the screen switch from "waiting for
+        // activation" to fully usable the instant an admin approves it online.
+        setLocked(storePending());
         if (currentKey != null) {
             navigateTo(currentKey);
         }
@@ -219,14 +232,72 @@ public class MainFrame extends JFrame {
     private boolean storePending() {
         try {
             int storeId = context.getCurrentStoreId();
-            if (storeId <= 0) {
-                return false;
+            com.smartbillingpro.model.Store store = storeId > 0
+                    ? context.getStoreService().findById(storeId) : null;
+            if (store != null) {
+                // Once the store exists locally, trust its activation flag: the
+                // background sync flips it to active when an admin approves it.
+                if (store.isActive()) {
+                    forcePending = false;
+                    return false;
+                }
+                return true;
             }
-            com.smartbillingpro.model.Store store = context.getStoreService().findById(storeId);
-            return store != null && !store.isActive();
+            // Not downloaded yet (registration still running in the background):
+            // stay locked if we were opened straight from the create-store flow.
+            return forcePending;
         } catch (RuntimeException e) {
-            return false;
+            return forcePending;
         }
+    }
+
+    /**
+     * Locks or unlocks the whole app. While a brand-new store waits for admin
+     * activation the owner can preview the dashboard, but every other screen is
+     * disabled. The moment the store is activated online this runs again and
+     * turns everything back on - without ever leaving the screen.
+     */
+    private void setLocked(boolean locked) {
+        if (activationBanner != null) {
+            activationBanner.setVisible(locked);
+        }
+        for (Map.Entry<String, SidebarButton> entry : navButtons.entrySet()) {
+            // Keep the Dashboard reachable as a read-only preview; lock the rest.
+            entry.getValue().setEnabled(!locked || entry.getKey().equals("dashboard"));
+        }
+        if (locked) {
+            // A locked store can only sit on the dashboard preview.
+            currentKey = "dashboard";
+            cardLayout.show(content, "dashboard");
+            for (Map.Entry<String, SidebarButton> entry : navButtons.entrySet()) {
+                entry.getValue().setActive(entry.getKey().equals("dashboard"));
+            }
+        }
+    }
+
+    /**
+     * Called on the UI thread once the background cloud registration succeeds.
+     * The real saved owner account is now signed in, so start the background
+     * sync (which unlocks the store the instant an admin activates it) and
+     * refresh the screen.
+     */
+    public void onStoreRegistered() {
+        context.startCloudSync();
+        refreshCurrent();
+    }
+
+    /** Called on the UI thread if the background cloud registration fails. */
+    public void onStoreRegistrationFailed(String error) {
+        JOptionPane.showMessageDialog(this,
+                "Your store could not be registered online:\n"
+                        + (error == null ? "Please check your internet connection." : error)
+                        + "\n\nPlease sign in and try again.",
+                "Create store", JOptionPane.WARNING_MESSAGE);
+        if (liveSync != null) {
+            liveSync.stop();
+        }
+        dispose();
+        new LoginFrame(context).setVisible(true);
     }
 
     private void logout() {
