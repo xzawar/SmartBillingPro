@@ -3,6 +3,7 @@ package com.smartbillingpro;
 import com.smartbillingpro.service.AppContext;
 import com.smartbillingpro.ui.LoginFrame;
 import com.smartbillingpro.ui.theme.Theme;
+import com.smartbillingpro.util.CloudConfig;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -26,6 +27,9 @@ final class Bootstrap {
             // fall back to the default look and feel
         }
         Theme.apply();
+        // Auto-create the cloud connection setting on first run, so the app
+        // connects to the web backend without any manual environment variables.
+        CloudConfig.bootstrap();
         SwingUtilities.invokeLater(() -> {
             try {
                 AppContext context = new AppContext();

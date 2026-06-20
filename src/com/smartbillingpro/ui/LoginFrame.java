@@ -15,7 +15,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JTextField;
@@ -26,11 +25,19 @@ import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 
-/** The sign-in window shown before the main application opens. */
+/**
+ * The sign-in window shown before the main application opens.
+ *
+ * <p>The screen is deliberately simple: a username, a password and a single
+ * <b>Sign In</b> button (plus an optional <b>Create a new store</b> button when
+ * a cloud backend is configured). The Sign In button works for both local and
+ * online accounts - it checks the local database first (so saved accounts open
+ * instantly and offline) and falls back to Supabase when the account is not
+ * found locally.
+ */
 public class LoginFrame extends JFrame {
 
     /** Which kind of accounts a particular launcher accepts. */
@@ -42,6 +49,7 @@ public class LoginFrame extends JFrame {
     private final JPasswordField passwordField = new JPasswordField(18);
     private final JCheckBox rememberMe = new JCheckBox("Remember me");
     private final JLabel errorLabel = new JLabel(" ");
+    private RoundedButton signInButton;
 
     public LoginFrame(AppContext context) {
         this(context, Mode.ALL);
@@ -118,7 +126,7 @@ public class LoginFrame extends JFrame {
         RoundedPanel card = new RoundedPanel(new GridBagLayout());
         card.setArc(22);
         card.setBorder(BorderFactory.createEmptyBorder(34, 40, 34, 40));
-        card.setPreferredSize(new Dimension(360, 410));
+        card.setPreferredSize(new Dimension(360, 380));
 
         GridBagConstraints c = new GridBagConstraints();
         c.gridx = 0;
@@ -127,25 +135,15 @@ public class LoginFrame extends JFrame {
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weightx = 1;
 
-        JLabel heading = new JLabel("Welcome back");
-        heading.setFont(Theme.bold(22));
-        heading.setForeground(Theme.TEXT);
-        card.add(heading, c);
-
-        c.gridy++;
-        JLabel hint = new JLabel("Sign in to continue");
-        hint.setFont(Theme.regular(13));
-        hint.setForeground(Theme.MUTED);
-        card.add(hint, c);
-
-        c.gridy++;
-        c.insets = new java.awt.Insets(22, 0, 4, 0);
+        // Username
+        c.insets = new java.awt.Insets(0, 0, 4, 0);
         card.add(fieldLabel("Username"), c);
         c.gridy++;
         c.insets = new java.awt.Insets(0, 0, 0, 0);
         styleField(usernameField);
         card.add(usernameField, c);
 
+        // Password
         c.gridy++;
         c.insets = new java.awt.Insets(16, 0, 4, 0);
         card.add(fieldLabel("Password"), c);
@@ -154,6 +152,7 @@ public class LoginFrame extends JFrame {
         styleField(passwordField);
         card.add(passwordField, c);
 
+        // Remember me
         c.gridy++;
         c.insets = new java.awt.Insets(12, 0, 0, 0);
         rememberMe.setFont(Theme.regular(13));
@@ -163,33 +162,28 @@ public class LoginFrame extends JFrame {
         rememberMe.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         card.add(rememberMe, c);
 
+        // Status / error message
         c.gridy++;
         c.insets = new java.awt.Insets(8, 0, 0, 0);
         errorLabel.setFont(Theme.regular(12));
         errorLabel.setForeground(Theme.DANGER);
         card.add(errorLabel, c);
 
+        // Sign In button (works for both local and online accounts)
         c.gridy++;
         c.insets = new java.awt.Insets(14, 0, 0, 0);
-        RoundedButton signIn = new RoundedButton("Sign In", Theme.PRIMARY, java.awt.Color.WHITE);
-        signIn.addActionListener(e -> doLogin());
-        card.add(signIn, c);
+        signInButton = new RoundedButton("Sign In", Theme.PRIMARY, java.awt.Color.WHITE);
+        signInButton.addActionListener(e -> doLogin());
+        card.add(signInButton, c);
 
-        // Cloud options: only when a cloud backend is configured, and never on the
-        // admin-only launcher (admins manage stores from the web console).
+        // Create a new store: only when a cloud backend is configured, and never on
+        // the admin-only launcher (admins manage stores from the web console).
         if (CloudAccess.isConfigured() && mode != Mode.ADMIN_ONLY) {
             c.gridy++;
             c.insets = new java.awt.Insets(10, 0, 0, 0);
-            RoundedButton online = new RoundedButton("Sign in on this device (online)",
-                    Theme.withAlpha(Theme.PRIMARY, 28), Theme.PRIMARY);
-            online.addActionListener(e -> doOnlineSignIn());
-            card.add(online, c);
-
-            c.gridy++;
-            c.insets = new java.awt.Insets(8, 0, 0, 0);
             RoundedButton createStore = new RoundedButton("Create a new store",
                     Theme.GOLD, Theme.TEXT);
-            createStore.addActionListener(e -> openCreateStoreDialog());
+            createStore.addActionListener(e -> openCreateStore());
             card.add(createStore, c);
         }
 
@@ -230,139 +224,113 @@ public class LoginFrame extends JFrame {
                 BorderFactory.createEmptyBorder(9, 12, 9, 12)));
     }
 
+    /**
+     * The single Sign In action. Checks the local database first (instant for
+     * saved accounts, works offline); if the account is not found locally and a
+     * cloud backend is configured, it then checks Supabase, downloads the data
+     * and signs in.
+     */
     private void doLogin() {
         String username = usernameField.getText().trim();
         String password = new String(passwordField.getPassword());
-        User user = context.getAuthService().authenticate(username, password);
-        if (user == null) {
-            errorLabel.setText("Invalid username or password.");
-            passwordField.setText("");
+        if (username.isEmpty() || password.isEmpty()) {
+            showError("Enter your username and password.");
             return;
         }
-        if (!allowed(user, mode)) {
-            errorLabel.setText(mode == Mode.ADMIN_ONLY
-                    ? "This window is for the administrator only."
-                    : "Administrators must use the Admin app.");
-            passwordField.setText("");
+
+        // 1) Local database first.
+        User local = context.getAuthService().authenticate(username, password);
+        if (local != null) {
+            if (!allowed(local, mode)) {
+                showRejected();
+                return;
+            }
+            finishLogin(local, username, password, true);
             return;
         }
+
+        // 2) Not found locally - try the cloud (Supabase) if configured.
+        if (CloudAccess.isConfigured()) {
+            setBusy("Checking online\u2026");
+            new Thread(() -> {
+                User online = null;
+                String err = null;
+                try {
+                    online = CloudAccess.signInOnline(context, username, password);
+                } catch (RuntimeException ex) {
+                    err = ex.getMessage();
+                }
+                final User result = online;
+                final String error = err;
+                SwingUtilities.invokeLater(() -> {
+                    setIdle();
+                    if (result == null) {
+                        showError(error != null ? "Could not sign in: " + error
+                                : "Invalid username or password.");
+                        passwordField.setText("");
+                    } else if (!allowed(result, mode)) {
+                        showRejected();
+                    } else {
+                        finishLogin(result, username, password, false);
+                    }
+                });
+            }, "online-signin").start();
+            return;
+        }
+
+        showError("Invalid username or password.");
+        passwordField.setText("");
+    }
+
+    /** Completes a successful sign-in and opens the right workspace. */
+    private void finishLogin(User user, String username, String password, boolean ensureCloud) {
         // Honour the "Remember me" choice: it lasts until an explicit logout.
         if (rememberMe.isSelected()) {
-            RememberMe.remember(username);
+            RememberMe.remember(user.getUsername());
         } else {
             RememberMe.clear();
         }
         context.setCurrentUser(user);
         context.getAuditService().log("LOGIN", "Signed in");
+        // If we signed in from the local copy but a cloud backend is configured,
+        // make sure we also hold a cloud session so background sync runs both
+        // ways (this is what keeps Supabase and the desktop in step).
+        if (ensureCloud) {
+            CloudAccess.ensureBackgroundSync(context, username, password);
+        }
         dispose();
         SwingUtilities.invokeLater(() -> openFrameFor(context, user));
     }
 
-    /**
-     * Sign in against the cloud on this device. Downloads the store's data, then
-     * opens the app offline-capable. Useful on a second computer for an existing
-     * store.
-     */
-    private void doOnlineSignIn() {
-        JTextField user = new JTextField(18);
-        JPasswordField pass = new JPasswordField(18);
-        JPanel form = new JPanel(new GridLayout(0, 1, 0, 6));
-        form.add(new JLabel("Username"));
-        form.add(user);
-        form.add(new JLabel("Password"));
-        form.add(pass);
-        int ok = JOptionPane.showConfirmDialog(this, form, "Sign in on this device",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (ok != JOptionPane.OK_OPTION) {
-            return;
-        }
-        String username = user.getText().trim();
-        String password = new String(pass.getPassword());
-        if (username.isEmpty() || password.isEmpty()) {
-            errorLabel.setText("Enter your username and password.");
-            return;
-        }
-        try {
-            User u = CloudAccess.signInOnline(context, username, password);
-            if (u == null) {
-                errorLabel.setText("Signed in online, but no local account was found.");
-                return;
-            }
-            if (!allowed(u, mode)) {
-                errorLabel.setText("This window cannot open that kind of account.");
-                return;
-            }
-            if (rememberMe.isSelected()) {
-                RememberMe.remember(u.getUsername());
-            }
-            context.setCurrentUser(u);
-            context.getAuditService().log("LOGIN", "Signed in online");
-            dispose();
-            SwingUtilities.invokeLater(() -> openFrameFor(context, u));
-        } catch (RuntimeException ex) {
-            errorLabel.setText("Online sign-in failed: " + ex.getMessage());
+    /** Opens the full-screen "Create a new store" wizard. */
+    private void openCreateStore() {
+        dispose();
+        SwingUtilities.invokeLater(() -> new CreateStoreFrame(context, mode).setVisible(true));
+    }
+
+    private void showRejected() {
+        showError(mode == Mode.ADMIN_ONLY
+                ? "This window is for the administrator only."
+                : "Administrators must use the Admin app.");
+        passwordField.setText("");
+    }
+
+    private void showError(String message) {
+        errorLabel.setForeground(Theme.DANGER);
+        errorLabel.setText(message);
+    }
+
+    private void setBusy(String message) {
+        errorLabel.setForeground(Theme.MUTED);
+        errorLabel.setText(message);
+        if (signInButton != null) {
+            signInButton.setEnabled(false);
         }
     }
 
-    /**
-     * Create a brand-new store from this device. The user enters the store
-     * details and their own owner credentials; an owner account is created
-     * automatically and they are signed straight in. The dashboard opens with a
-     * "waiting for administrator activation" notice and settings stay locked
-     * until an administrator activates the store from the web console.
-     */
-    private void openCreateStoreDialog() {
-        JTextField storeName = new JTextField(18);
-        JTextField storePhone = new JTextField(18);
-        JTextField storeAddress = new JTextField(18);
-        JTextField ownerName = new JTextField(18);
-        JTextField ownerUser = new JTextField(18);
-        JPasswordField ownerPass = new JPasswordField(18);
-        JPanel form = new JPanel(new GridLayout(0, 1, 0, 5));
-        form.add(new JLabel("Store name"));
-        form.add(storeName);
-        form.add(new JLabel("Store phone"));
-        form.add(storePhone);
-        form.add(new JLabel("Store address"));
-        form.add(storeAddress);
-        form.add(new JLabel("Your full name (owner)"));
-        form.add(ownerName);
-        form.add(new JLabel("Choose a username"));
-        form.add(ownerUser);
-        form.add(new JLabel("Choose a password"));
-        form.add(ownerPass);
-        int ok = JOptionPane.showConfirmDialog(this, form, "Create a new store",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (ok != JOptionPane.OK_OPTION) {
-            return;
-        }
-        if (storeName.getText().trim().isEmpty() || ownerUser.getText().trim().isEmpty()
-                || ownerPass.getPassword().length == 0) {
-            errorLabel.setText("Store name, username and password are required.");
-            return;
-        }
-        try {
-            User u = CloudAccess.registerStore(context,
-                    storeName.getText().trim(), storePhone.getText().trim(), storeAddress.getText().trim(),
-                    ownerUser.getText().trim(), new String(ownerPass.getPassword()), ownerName.getText().trim());
-            if (u == null) {
-                errorLabel.setText("Store created online, but local sign-in failed. Try \"Sign in on this device\".");
-                return;
-            }
-            JOptionPane.showMessageDialog(this,
-                    "Your store has been created and you are now signed in.\n"
-                            + "It is waiting for administrator activation - you can look around,\n"
-                            + "but settings stay locked until the administrator activates it from the web.",
-                    "Store created", JOptionPane.INFORMATION_MESSAGE);
-            if (rememberMe.isSelected()) {
-                RememberMe.remember(u.getUsername());
-            }
-            context.setCurrentUser(u);
-            context.getAuditService().log("REGISTER_STORE", "Created store " + storeName.getText().trim());
-            dispose();
-            SwingUtilities.invokeLater(() -> openFrameFor(context, u));
-        } catch (RuntimeException ex) {
-            errorLabel.setText("Could not create store: " + ex.getMessage());
+    private void setIdle() {
+        if (signInButton != null) {
+            signInButton.setEnabled(true);
         }
     }
 

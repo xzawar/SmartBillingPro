@@ -231,45 +231,65 @@ async function loadDashboard() {
 }
 
 // =================== ACCOUNTS ===================
-let storesCache = [];  // for the account modal's store dropdown (admin)
+let storesCache = [];   // for the account modal's store dropdown (admin)
+let accountsCache = []; // cached account rows so a row click can open its popup
+let storeNameById = {}; // store id -> name, for the Store column / popup
 async function loadAccounts() {
   const d = await api("/accounts");
   const rows = d.accounts || [];
+  accountsCache = rows;
   // Build a quick id->name lookup for the Store column (admin view).
-  let nameById = {};
+  storeNameById = {};
   if (profile.role === "ADMIN") {
-    try { const sd = await api("/admin/stores"); storesCache = sd.stores || []; storesCache.forEach((s) => (nameById[s.id] = s.name)); } catch (e) {}
+    try { const sd = await api("/admin/stores"); storesCache = sd.stores || []; storesCache.forEach((s) => (storeNameById[s.id] = s.name)); } catch (e) {}
   }
   $("accounts-body").innerHTML = rows.length
     ? rows.map((a) => {
         const status = a.active ? '<span class="badge on">Active</span>' : '<span class="badge off">Disabled</span>';
-        const storeName = a.role === "ADMIN" ? "-" : (nameById[a.store_id] || (profile.role === "OWNER" ? "(your store)" : "-"));
-        let actions = "";
-        if (a.role !== "ADMIN") {
-          actions = (a.active ? btn("acc-disable", a.id, "Disable", "danger") : btn("acc-enable", a.id, "Enable", "go")) +
-            btn("acc-reset", a.id, "Reset pw", "");
-        }
-        return "<tr><td>" + esc(a.username) + "</td><td>" + esc(a.full_name || "-") + "</td><td>" +
-          esc(a.role) + "</td><td>" + esc(storeName) + "</td><td>" + status + "</td><td>" + actions + "</td></tr>";
+        return '<tr class="clickable" data-id="' + esc(a.id) + '"><td>' + esc(a.username) + "</td><td>" +
+          esc(a.full_name || "-") + "</td><td>" + esc(a.role) + "</td><td>" + esc(accountStoreName(a)) + "</td><td>" +
+          status + '</td><td class="row-go">Manage \u203A</td></tr>';
       }).join("")
     : '<tr><td colspan="6" class="muted">No accounts yet.</td></tr>';
 }
 
-$("accounts-body").addEventListener("click", async (e) => {
-  const b = e.target.closest("button[data-action]");
-  if (!b) return;
-  const id = b.dataset.id;
-  try {
-    if (b.dataset.action === "acc-disable") await api("/accounts", { method: "POST", body: JSON.stringify({ action: "disable", id }) });
-    else if (b.dataset.action === "acc-enable") await api("/accounts", { method: "POST", body: JSON.stringify({ action: "enable", id }) });
-    else if (b.dataset.action === "acc-reset") {
-      const pw = prompt("New password for this account:");
-      if (!pw) return;
-      await api("/accounts", { method: "POST", body: JSON.stringify({ action: "reset", id, password: pw }) });
+function accountStoreName(a) {
+  if (a.role === "ADMIN") return "-";
+  return storeNameById[a.store_id] || (profile.role === "OWNER" ? "(your store)" : "-");
+}
+
+// Click a row to open its account popup (a replica of the desktop app's dialog).
+$("accounts-body").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-id]");
+  if (!tr) return;
+  const a = accountsCache.find((x) => String(x.id) === String(tr.dataset.id));
+  if (a) openAccountModal(a);
+});
+
+// Account detail popup: view the account and change its status / password.
+function openAccountModal(a) {
+  const isAdmin = a.role === "ADMIN";
+  const body = `
+    <label>Username<input type="text" value="${esc(a.username)}" disabled /></label>
+    <label>Full name<input type="text" value="${esc(a.full_name || "")}" disabled /></label>
+    <label>Role<input type="text" value="${esc(a.role)}" disabled /></label>
+    <label>Store<input type="text" value="${esc(accountStoreName(a))}" disabled /></label>
+    <label class="check"><input id="f-acc-active" type="checkbox" ${a.active ? "checked" : ""} ${isAdmin ? "disabled" : ""} /> Account active</label>
+    <label>Reset password<input id="f-acc-newpass" type="password" placeholder="${isAdmin ? "Not available for admin" : "Leave blank to keep current"}" ${isAdmin ? "disabled" : ""} /></label>
+  `;
+  openModal("Account \u2022 " + a.username, body, async () => {
+    if (isAdmin) return; // the administrator account cannot be edited here
+    const active = $("f-acc-active").checked;
+    if (active !== !!a.active) {
+      await api("/accounts", { method: "POST", body: JSON.stringify({ action: active ? "enable" : "disable", id: a.id }) });
+    }
+    const pw = $("f-acc-newpass").value;
+    if (pw) {
+      await api("/accounts", { method: "POST", body: JSON.stringify({ action: "reset", id: a.id, password: pw }) });
     }
     loadAccounts();
-  } catch (err) { alert(err.message); }
-});
+  });
+}
 
 // New account modal: admin must PICK a store + role; owners add staff to own store.
 $("add-account-btn").addEventListener("click", async () => {

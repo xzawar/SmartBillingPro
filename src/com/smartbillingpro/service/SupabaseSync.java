@@ -82,7 +82,9 @@ public class SupabaseSync {
         try {
             Connection c = db.connection();
             try (Statement st = c.createStatement()) {
-                st.execute("CREATE TEMP TABLE IF NOT EXISTS sync_guard (active INTEGER)");
+                // Permanent (not TEMP) so the triggers below can always find it,
+                // even on connections/sessions that never ran prepareSchema().
+                st.execute("CREATE TABLE IF NOT EXISTS sync_guard (active INTEGER)");
                 st.execute("DELETE FROM sync_guard");
                 st.execute("INSERT INTO sync_guard (active) VALUES (0)");
             }
@@ -183,8 +185,11 @@ public class SupabaseSync {
         }
         CloudClient client = new CloudClient(CloudConfig.apiBase());
         try {
-            pull(client, token, cloudStore);
+            // Push BEFORE pull: send everything edited locally to the cloud first,
+            // so a pull can never overwrite changes that have not been uploaded
+            // yet (this is what used to make freshly-saved settings "revert").
             push(client, token, cloudStore);
+            pull(client, token, cloudStore);
         } catch (CloudClient.CloudException e) {
             // Offline or auth error - try again next cycle.
             System.err.println("[sync] " + e.getMessage());
@@ -344,15 +349,25 @@ public class SupabaseSync {
             // Locate an existing local row by its remote_uuid.
             Long rowid = null;
             String localUpdated = null;
+            boolean localDirty = false;
             try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT rowid, updated_at FROM " + table + " WHERE remote_uuid = ?")) {
+                    "SELECT rowid, updated_at, dirty FROM " + table + " WHERE remote_uuid = ?")) {
                 ps.setString(1, uuid);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         rowid = rs.getLong(1);
                         localUpdated = rs.getString(2);
+                        localDirty = rs.getInt(3) == 1;
                     }
                 }
+            }
+
+            // Never overwrite a row that still has unsaved local changes waiting
+            // to be pushed. The local edit wins; it will be uploaded on the push
+            // half of the cycle. Without this, a pull could clobber values the
+            // user just typed (e.g. settings) before they were sent to the cloud.
+            if (rowid != null && localDirty && !deleted) {
+                return;
             }
 
             if (deleted) {

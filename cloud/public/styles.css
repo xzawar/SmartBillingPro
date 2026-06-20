@@ -96,3 +96,10 @@ body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-ser
   .cards{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:1fr}
   .login-brand{display:none}
 }
+
+/* ---- clickable table rows (account popup) ---- */
+tbody tr.clickable { cursor: pointer; }
+tbody tr.clickable:hover { background: rgba(30, 58, 138, 0.06); }
+.row-go { color: #1E3A8A; font-weight: 600; text-align: right; white-space: nowrap; }
+.modal label.check { display: flex; align-items: center; gap: 8px; flex-direction: row; }
+.modal label.check input { width: auto; }

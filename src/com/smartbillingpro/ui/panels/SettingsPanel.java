@@ -11,6 +11,7 @@ import com.smartbillingpro.util.Money;
 
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
@@ -22,6 +23,8 @@ import java.awt.Insets;
 /** Edit shop-wide settings such as business details, tax, currency and policies. */
 public class SettingsPanel extends PanelBase {
 
+    private static final Color LOCKED_BG = new Color(0xEE, 0xF1, 0xF6);
+
     private final JTextField businessName = new JTextField(20);
     private final JTextField address = new JTextField(20);
     private final JTextField phone = new JTextField(20);
@@ -32,7 +35,13 @@ public class SettingsPanel extends PanelBase {
     private final JTextField lowStockThreshold = new JTextField(20);
     private final JTextField returnPolicyDays = new JTextField(20);
     private final JTextField loyaltyPer100 = new JTextField(20);
+    private final JTextField[] allFields = {
+            businessName, address, phone, invoicePrefix, taxPercent,
+            currencySymbol, footerMessage, lowStockThreshold, returnPolicyDays, loyaltyPer100
+    };
 
+    private final JLabel lockNotice = new JLabel(" ");
+    private RoundedButton saveButton;
     private int row = 0;
 
     public SettingsPanel(MainFrame frame, AppContext context) {
@@ -52,13 +61,20 @@ public class SettingsPanel extends PanelBase {
         addRow(card, "Return Policy (days)", returnPolicyDays);
         addRow(card, "Loyalty Points / 100 spent", loyaltyPer100);
 
-        RoundedButton save = new RoundedButton("Save Settings", Theme.PRIMARY, Color.WHITE);
-        save.addActionListener(e -> save());
-        addAction(save);
+        saveButton = new RoundedButton("Save Settings", Theme.PRIMARY, Color.WHITE);
+        saveButton.addActionListener(e -> save());
+        addAction(saveButton);
+
+        lockNotice.setFont(Theme.bold(12));
+        lockNotice.setForeground(Theme.WARNING);
 
         JPanel wrap = new JPanel(new java.awt.BorderLayout());
         wrap.setOpaque(false);
-        wrap.add(card, java.awt.BorderLayout.NORTH);
+        wrap.add(lockNotice, java.awt.BorderLayout.NORTH);
+        JPanel cardHolder = new JPanel(new java.awt.BorderLayout());
+        cardHolder.setOpaque(false);
+        cardHolder.add(card, java.awt.BorderLayout.NORTH);
+        wrap.add(cardHolder, java.awt.BorderLayout.CENTER);
         setBody(wrap);
     }
 
@@ -90,6 +106,15 @@ public class SettingsPanel extends PanelBase {
     }
 
     private void save() {
+        // A brand-new store stays locked until an administrator activates it from
+        // the web console; until then settings cannot be changed.
+        if (!storeActive()) {
+            JOptionPane.showMessageDialog(this,
+                    "This store is waiting for administrator activation.\n"
+                            + "You can change settings once it has been activated from the web.",
+                    "Settings locked", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
         if (businessName.getText().trim().isEmpty()) {
             JOptionPane.showMessageDialog(this, "Business name is required.");
             return;
@@ -111,6 +136,39 @@ public class SettingsPanel extends PanelBase {
         JOptionPane.showMessageDialog(this, "Settings saved.");
     }
 
+    /**
+     * Whether this device's current store is active (activated by an admin).
+     * Admin/no specific store is always treated as active.
+     */
+    private boolean storeActive() {
+        try {
+            int storeId = context.getCurrentStoreId();
+            if (storeId <= 0) {
+                return true;
+            }
+            com.smartbillingpro.model.Store store = context.getStoreService().findById(storeId);
+            return store == null || store.isActive();
+        } catch (RuntimeException ex) {
+            return true;
+        }
+    }
+
+    /** Greys out (locks) every field and the Save button while the store is pending. */
+    private void setEditable(boolean editable) {
+        for (JTextField field : allFields) {
+            field.setEnabled(editable);
+            field.setBackground(editable ? Color.WHITE : LOCKED_BG);
+        }
+        if (saveButton != null) {
+            saveButton.setEnabled(editable);
+        }
+        if (editable) {
+            lockNotice.setText(" ");
+        } else {
+            lockNotice.setText("\u23F3  Settings are locked until an administrator activates this store from the web.");
+        }
+    }
+
     @Override
     public void refreshData() {
         Settings s = settings();
@@ -124,5 +182,7 @@ public class SettingsPanel extends PanelBase {
         lowStockThreshold.setText(String.valueOf(s.getLowStockThreshold()));
         returnPolicyDays.setText(String.valueOf(s.getReturnPolicyDays()));
         loyaltyPer100.setText(String.valueOf(s.getLoyaltyPointsPer100()));
+        // Lock everything if the store is still waiting for activation.
+        setEditable(storeActive());
     }
 }

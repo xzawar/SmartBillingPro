@@ -116,11 +116,23 @@ public class Database {
                 "product_name TEXT, quantity INTEGER, cost_price TEXT, " +
                 "FOREIGN KEY (po_id) REFERENCES purchase_orders(id))",
             "CREATE TABLE IF NOT EXISTS audit_log (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL DEFAULT 0, timestamp TEXT, username TEXT, action TEXT, details TEXT)"
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL DEFAULT 0, timestamp TEXT, username TEXT, action TEXT, details TEXT)",
+            // Cloud-sync guard flag. Created here as a PERMANENT table (not a TEMP
+            // table) so that the sync triggers, which live in the database file,
+            // can always find it - even on a brand new session before cloud sync
+            // has run. Without this, any insert/update would fail with
+            // "no such table: sync_guard".
+            "CREATE TABLE IF NOT EXISTS sync_guard (active INTEGER)"
         };
         try (Statement st = connection.createStatement()) {
             for (String sql : ddl) {
                 st.execute(sql);
+            }
+            // Ensure exactly one guard row exists, defaulting to "not syncing".
+            try (ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM sync_guard")) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    st.execute("INSERT INTO sync_guard (active) VALUES (0)");
+                }
             }
         }
     }

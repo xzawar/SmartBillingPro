@@ -123,6 +123,40 @@ public final class CloudAccess {
         return context.getAuthService().authenticate(username, password);
     }
 
+    /**
+     * Best-effort: make sure this device has a cloud session token so the
+     * background two-way sync can run. Safe to call right after a local sign-in.
+     * It does nothing when the cloud is not configured, and always runs on its
+     * own daemon thread so it never blocks or breaks the sign-in.
+     *
+     * <p>This is what lets the single "Sign In" button keep the local database
+     * and Supabase in step: if you signed in from the local copy but a cloud
+     * backend is configured, we quietly obtain a token in the background and
+     * start syncing both ways.
+     */
+    public static void ensureBackgroundSync(AppContext context, String username, String password) {
+        if (!CloudConfig.isConfigured()) {
+            return;
+        }
+        Thread worker = new Thread(() -> {
+            try {
+                if (CloudConfig.token() == null) {
+                    // No saved session yet - sign in online once to get a token
+                    // and pull/push the initial data.
+                    signInOnline(context, username, password);
+                }
+                // Token is present now (saved earlier or just obtained) - start
+                // the recurring background sync.
+                context.getCloudSync().start();
+            } catch (Exception ignored) {
+                // Offline or wrong cloud password: the app still works locally
+                // and will try again on the next sign-in.
+            }
+        }, "cloud-ensure-sync");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
     private static String str(Object o) {
         return o == null ? null : o.toString();
     }
