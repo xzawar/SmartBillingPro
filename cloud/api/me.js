@@ -9,6 +9,8 @@ module.exports = async (req, res) => {
 
   const { data: user } = await supabase.from("users").select("*").eq("id", tok.uid).maybeSingle();
   if (!user || user.deleted || !user.active) return res.status(401).json({ error: "Session is no longer valid." });
+  // Cashiers may not use the web version, even with a previously-saved token.
+  if (user.role === "CASHIER") return res.status(403).json({ error: "Cashier accounts can't use the web version. Please use the desktop app." });
 
   let stores = [];
   let pending = false;

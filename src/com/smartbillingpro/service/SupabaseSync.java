@@ -211,6 +211,15 @@ public class SupabaseSync {
             try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery(sql)) {
                 while (rs.next()) {
                     long rowid = rs.getLong("rowid");
+                    // Never push the built-in administrator account. The cloud
+                    // seeds its OWN "admin" row, so pushing this local copy would
+                    // collide on the unique username and make the whole push
+                    // fail - which aborts the cycle before the pull and is why a
+                    // fresh admin device never downloaded the stores from the web.
+                    if (table.equals("users")
+                            && "admin".equalsIgnoreCase(getString(rs, "username"))) {
+                        continue;
+                    }
                     String uuid = getString(rs, "remote_uuid");
                     if (uuid == null || uuid.isEmpty()) {
                         uuid = UUID.randomUUID().toString();

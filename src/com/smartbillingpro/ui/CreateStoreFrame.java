@@ -158,7 +158,10 @@ public class CreateStoreFrame extends JFrame {
         RoundedPanel card = new RoundedPanel(new GridBagLayout());
         card.setArc(22);
         card.setBorder(BorderFactory.createEmptyBorder(32, 40, 32, 40));
-        card.setPreferredSize(new Dimension(480, 470));
+        // Both step cards use the SAME size so the box looks identical/symmetrical
+        // as you move between steps, and is tall enough to hold every field and
+        // button (the old, shorter size pushed the buttons outside the panel).
+        card.setPreferredSize(new Dimension(470, 560));
         GridBagConstraints c = baseConstraints();
 
         JLabel heading = new JLabel("Store details");
@@ -199,7 +202,10 @@ public class CreateStoreFrame extends JFrame {
         RoundedPanel card = new RoundedPanel(new GridBagLayout());
         card.setArc(22);
         card.setBorder(BorderFactory.createEmptyBorder(32, 40, 32, 40));
-        card.setPreferredSize(new Dimension(480, 520));
+        // Same fixed size as the store card (see above) so both steps are
+        // symmetrical and all four fields + the Create/Back buttons fit inside
+        // the rounded box instead of spilling out behind it.
+        card.setPreferredSize(new Dimension(470, 560));
         GridBagConstraints c = baseConstraints();
 
         JLabel heading = new JLabel("Owner account");

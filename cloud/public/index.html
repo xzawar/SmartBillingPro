@@ -93,7 +93,7 @@
             </table>
           </div>
           <div class="panel">
-            <h2>Low Stock Items <span class="muted small">(view only - inventory is edited in the app)</span></h2>
+            <h2>Low Stock Items <span class="muted small">(manage products in the Inventory tab)</span></h2>
             <table class="data-table">
               <thead><tr><th>SKU</th><th>Name</th><th>Category</th><th class="num">Qty</th></tr></thead>
               <tbody id="lowstock-body"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody>
@@ -112,6 +112,22 @@
               <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Store</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody id="accounts-body"><tr><td colspan="6" class="muted">Loading...</td></tr></tbody>
             </table>
+          </div>
+        </section>
+
+        <!-- INVENTORY (owner / manager: view + edit) -->
+        <section id="inventory-section" class="hidden">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Inventory</h2>
+              <button id="add-product-btn" class="btn-primary small">+ Add product</button>
+            </div>
+            <p class="muted small">View and update your store's products. Changes sync to the desktop app automatically. Click a row to edit it.</p>
+            <table class="data-table">
+              <thead><tr><th>SKU</th><th>Name</th><th>Category</th><th class="num">Cost</th><th class="num">Sale</th><th class="num">Qty</th><th>Actions</th></tr></thead>
+              <tbody id="inventory-body"><tr><td colspan="7" class="muted">Loading...</td></tr></tbody>
+            </table>
+            <p id="inventory-msg" class="muted small"></p>
           </div>
         </section>
 

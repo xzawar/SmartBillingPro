@@ -48,14 +48,16 @@ function sectionsForRole(role) {
   ];
   if (role === "OWNER") return [
     { id: "dash", label: "Dashboard" },
+    { id: "inventory", label: "Inventory" },
     { id: "accounts", label: "Accounts" },
     { id: "settings", label: "Settings" },
   ];
   if (role === "MANAGER") return [
     { id: "dash", label: "Dashboard" },
+    { id: "inventory", label: "Inventory" },
     { id: "settings", label: "Settings" },
   ];
-  return [{ id: "dash", label: "Dashboard" }]; // CASHIER
+  return []; // CASHIER accounts can't sign in to the web version anymore
 }
 
 // =================== LOGIN ===================
@@ -131,8 +133,9 @@ function updatePendingBanner() {
 const SECTION_EL = {
   admin: "admin-section", dash: "dash-section",
   accounts: "accounts-section", settings: "settings-section",
+  inventory: "inventory-section",
 };
-const SECTION_TITLE = { admin: "Stores", dash: "Dashboard", accounts: "Accounts", settings: "Settings" };
+const SECTION_TITLE = { admin: "Stores", dash: "Dashboard", accounts: "Accounts", settings: "Settings", inventory: "Inventory" };
 
 function showSection(id) {
   activeSection = id;
@@ -149,6 +152,7 @@ function refreshActive(silent) {
   const fn = {
     admin: loadStores, dash: loadDashboard,
     accounts: loadAccounts, settings: loadSettings,
+    inventory: loadInventory,
   }[activeSection];
   if (fn) fn(silent).catch((e) => { if (!silent) alert(e.message); });
 }
@@ -359,6 +363,100 @@ $("save-settings-btn").addEventListener("click", async () => {
     $("settings-msg").textContent = "Saved.";
     setTimeout(() => ($("settings-msg").textContent = ""), 2000);
   } catch (err) { alert(err.message); }
+});
+
+// =================== INVENTORY (owner / manager view + edit) ===================
+let inventoryCache = []; // cached product rows so a row click can open its editor
+
+// Admin works on the selected store; owners/managers on their own store.
+function inventoryStorePayload() {
+  const sid = currentStoreId || profile.store_id;
+  return profile.role === "ADMIN" && sid ? { store: sid } : {};
+}
+
+async function loadInventory() {
+  const storeId = currentStoreId || profile.store_id;
+  const q = profile.role === "ADMIN" && storeId ? ("?store=" + encodeURIComponent(storeId)) : "";
+  const d = await api("/inventory" + q);
+  const rows = d.products || [];
+  inventoryCache = rows;
+  const locked = !!(profile && profile.pending);
+  $("add-product-btn").disabled = locked;
+  $("inventory-msg").textContent = locked
+    ? "Inventory is locked until an administrator activates your store."
+    : "";
+  $("inventory-body").innerHTML = rows.length
+    ? rows.map((p) =>
+        '<tr class="clickable" data-id="' + esc(p.id) + '"><td>' + esc(p.sku) + "</td><td>" +
+        esc(p.name) + "</td><td>" + esc(p.category || "-") + '</td><td class="num">' +
+        money(p.cost_price) + '</td><td class="num">' + money(p.sale_price) + '</td><td class="num">' +
+        (p.quantity || 0) + '</td><td class="row-go">Edit \u203A</td></tr>').join("")
+    : '<tr><td colspan="7" class="muted">No products yet.</td></tr>';
+}
+
+function productFormHtml(p) {
+  p = p || {};
+  return (
+    '<label>SKU<input id="f-prod-sku" type="text" value="' + esc(p.sku || "") + '" /></label>' +
+    '<label>Name<input id="f-prod-name" type="text" value="' + esc(p.name || "") + '" /></label>' +
+    '<label>Category<input id="f-prod-cat" type="text" value="' + esc(p.category || "") + '" /></label>' +
+    '<label>Cost price<input id="f-prod-cost" type="number" step="0.01" value="' + esc(p.cost_price == null ? "" : p.cost_price) + '" /></label>' +
+    '<label>Sale price<input id="f-prod-sale" type="number" step="0.01" value="' + esc(p.sale_price == null ? "" : p.sale_price) + '" /></label>' +
+    '<label>Quantity<input id="f-prod-qty" type="number" step="1" value="' + esc(p.quantity == null ? "" : p.quantity) + '" /></label>'
+  );
+}
+
+function readProductForm() {
+  return {
+    sku: $("f-prod-sku").value.trim(),
+    name: $("f-prod-name").value.trim(),
+    category: $("f-prod-cat").value.trim(),
+    cost_price: $("f-prod-cost").value.trim() || "0",
+    sale_price: $("f-prod-sale").value.trim() || "0",
+    quantity: $("f-prod-qty").value.trim() || "0",
+  };
+}
+
+// Click a product row to edit (or delete) it.
+$("inventory-body").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-id]");
+  if (!tr) return;
+  if (profile && profile.pending) { alert("Inventory is locked until an administrator activates your store."); return; }
+  const p = inventoryCache.find((x) => String(x.id) === String(tr.dataset.id));
+  if (p) openProductModal(p);
+});
+
+function openProductModal(p) {
+  const store = inventoryStorePayload();
+  openModal("Product \u2022 " + (p.name || p.sku),
+    productFormHtml(p) + '<button id="f-prod-delete" class="btn-mini danger" style="margin-top:12px">Delete product</button>',
+    async () => {
+      const fields = readProductForm();
+      if (!fields.sku || !fields.name) throw new Error("SKU and name are required.");
+      await api("/inventory", { method: "POST", body: JSON.stringify(Object.assign({ action: "update", id: p.id }, fields, store)) });
+      loadInventory();
+    });
+  const del = $("f-prod-delete");
+  if (del) del.addEventListener("click", async () => {
+    if (!confirm("Delete this product?")) return;
+    try {
+      await api("/inventory", { method: "POST", body: JSON.stringify(Object.assign({ action: "delete", id: p.id }, store)) });
+      closeModal();
+      loadInventory();
+    } catch (err) { $("modal-error").textContent = err.message; }
+  });
+}
+
+// Add a brand-new product from the web.
+$("add-product-btn").addEventListener("click", () => {
+  if (profile && profile.pending) { alert("Inventory is locked until an administrator activates your store."); return; }
+  const store = inventoryStorePayload();
+  openModal("New product", productFormHtml({}), async () => {
+    const fields = readProductForm();
+    if (!fields.sku || !fields.name) throw new Error("SKU and name are required.");
+    await api("/inventory", { method: "POST", body: JSON.stringify(Object.assign({ action: "create" }, fields, store)) });
+    loadInventory();
+  });
 });
 
 // =================== MODAL ===================

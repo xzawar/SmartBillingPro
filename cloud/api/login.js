@@ -17,6 +17,9 @@ module.exports = async (req, res) => {
   if (!user || user.deleted) return res.status(401).json({ error: "Invalid username or password." });
   if (user.password_hash !== sha256(password)) return res.status(401).json({ error: "Invalid username or password." });
   if (!user.active) return res.status(403).json({ error: "This account is disabled. Contact your administrator." });
+  // Cashiers are blocked from the web version - they can only sign in from the
+  // desktop app. Owners and managers (and the admin) keep their web access.
+  if (user.role === "CASHIER") return res.status(403).json({ error: "Cashier accounts can't sign in to the web version. Please use the desktop app." });
 
   let store = null;
   if (user.store_id) {
