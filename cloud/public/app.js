@@ -532,6 +532,24 @@ $("modal-ok").addEventListener("click", async () => {
   catch (err) { $("modal-error").textContent = err.message; }
 });
 
+// =================== RESPONSIVE: mobile sidebar drawer ===================
+// On small screens the sidebar slides in over the content. The hamburger
+// toggles it; tapping the backdrop or choosing a section closes it again.
+(function setupNavDrawer() {
+  const shell = $("app-view");
+  const toggle = $("nav-toggle");
+  const overlay = $("nav-overlay");
+  const nav = $("sidebar-nav");
+  if (!shell) return;
+  const setOpen = (open) => shell.classList.toggle("nav-open", open);
+  if (toggle) toggle.addEventListener("click", () => shell.classList.toggle("nav-open"));
+  if (overlay) overlay.addEventListener("click", () => setOpen(false));
+  // Close the drawer after navigating to a section.
+  if (nav) nav.addEventListener("click", (e) => { if (e.target.closest("button")) setOpen(false); });
+  // If the viewport grows back to desktop, make sure the drawer state is reset.
+  window.addEventListener("resize", () => { if (window.innerWidth > 720) setOpen(false); });
+})();
+
 // =================== STARTUP: restore remembered session ===================
 (async function init() {
   if (!token) return;

@@ -35,17 +35,23 @@
 
   <!-- ============ APP SHELL (sidebar + topbar, like the desktop app) ============ -->
   <div id="app-view" class="hidden app-shell">
+    <!-- Dimmed backdrop shown behind the slide-in sidebar on small screens -->
+    <div id="nav-overlay" class="nav-overlay"></div>
+
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-brand">&#128722; <span>Smart Billing Pro</span></div>
       <nav id="sidebar-nav" class="sidebar-nav"></nav>
-      <div class="sidebar-foot">Online &bull; v3.3</div>
+      <div class="sidebar-foot">Online &bull; v3.4</div>
     </aside>
 
     <!-- Main column -->
     <div class="main-col">
       <header class="topbar">
-        <div class="topbar-title" id="top-title">Dashboard</div>
+        <div class="topbar-left">
+          <button id="nav-toggle" class="nav-toggle" aria-label="Open menu">&#9776;</button>
+          <div class="topbar-title" id="top-title">Dashboard</div>
+        </div>
         <div class="topbar-right">
           <select id="store-select" class="store-select hidden"></select>
           <span id="who" class="who"></span>
