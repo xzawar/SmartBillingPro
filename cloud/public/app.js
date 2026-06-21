@@ -45,6 +45,7 @@ function sectionsForRole(role) {
   if (role === "ADMIN") return [
     { id: "admin", label: "Stores" },
     { id: "accounts", label: "Accounts" },
+    { id: "trash", label: "Deleted" },
   ];
   if (role === "OWNER") return [
     { id: "dash", label: "Dashboard" },
@@ -133,9 +134,9 @@ function updatePendingBanner() {
 const SECTION_EL = {
   admin: "admin-section", dash: "dash-section",
   accounts: "accounts-section", settings: "settings-section",
-  inventory: "inventory-section",
+  inventory: "inventory-section", trash: "trash-section",
 };
-const SECTION_TITLE = { admin: "Stores", dash: "Dashboard", accounts: "Accounts", settings: "Settings", inventory: "Inventory" };
+const SECTION_TITLE = { admin: "Stores", dash: "Dashboard", accounts: "Accounts", settings: "Settings", inventory: "Inventory", trash: "Deleted" };
 
 function showSection(id) {
   activeSection = id;
@@ -152,7 +153,7 @@ function refreshActive(silent) {
   const fn = {
     admin: loadStores, dash: loadDashboard,
     accounts: loadAccounts, settings: loadSettings,
-    inventory: loadInventory,
+    inventory: loadInventory, trash: loadTrash,
   }[activeSection];
   if (fn) fn(silent).catch((e) => { if (!silent) alert(e.message); });
 }
@@ -170,11 +171,12 @@ async function loadStores() {
       actions = btn("enable-store", s.id, "Enable", "go");
     } else if (!s.activated) {
       status = '<span class="badge pend">Waiting activation</span>';
-      actions = btn("activate-store", s.id, "Activate", "go") + btn("disable-store", s.id, "Disable", "danger");
+      actions = btn("activate-store", s.id, "Activate", "go") + btn("disable-store", s.id, "Disable", "");
     } else {
       status = '<span class="badge on">Active</span>';
-      actions = btn("disable-store", s.id, "Disable", "danger");
+      actions = btn("disable-store", s.id, "Disable", "");
     }
+    actions += btn("delete-store", s.id, "Delete", "danger");
     const owner = s.owner_pending ? '<span class="muted">pending owner</span>' : "";
     return "<tr><td>" + esc(s.name) + "</td><td>" + esc(s.phone || "-") + "</td><td>" +
       status + "</td><td>" + owner + "</td><td>" + actions + "</td></tr>";
@@ -188,10 +190,11 @@ function btn(action, id, label, cls) {
 $("stores-body").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-action]");
   if (!b) return;
-  const map = { "enable-store": "enable", "disable-store": "disable", "activate-store": "activate" };
+  const map = { "enable-store": "enable", "disable-store": "disable", "activate-store": "activate", "delete-store": "delete" };
   const action = map[b.dataset.action];
   if (!action) return;
   if (action === "disable" && !confirm("Disable this store? All its accounts will be blocked from signing in.")) return;
+  if (action === "delete" && !confirm("Move this store to the Recycle Bin? Its accounts go with it. You have 24 hours to restore it from the Deleted tab.")) return;
   try {
     await api("/admin/stores", { method: "POST", body: JSON.stringify({ action, id: b.dataset.id }) });
     loadStores();
@@ -280,6 +283,7 @@ function openAccountModal(a) {
     <label>Store<input type="text" value="${esc(accountStoreName(a))}" disabled /></label>
     <label class="check"><input id="f-acc-active" type="checkbox" ${a.active ? "checked" : ""} ${isAdmin ? "disabled" : ""} /> Account active</label>
     <label>Reset password<input id="f-acc-newpass" type="password" placeholder="${isAdmin ? "Not available for admin" : "Leave blank to keep current"}" ${isAdmin ? "disabled" : ""} /></label>
+    ${isAdmin ? "" : '<button id="f-acc-delete" class="btn-mini danger" style="margin-top:12px">Delete account</button>'}
   `;
   openModal("Account \u2022 " + a.username, body, async () => {
     if (isAdmin) return; // the administrator account cannot be edited here
@@ -292,6 +296,15 @@ function openAccountModal(a) {
       await api("/accounts", { method: "POST", body: JSON.stringify({ action: "reset", id: a.id, password: pw }) });
     }
     loadAccounts();
+  });
+  const del = $("f-acc-delete");
+  if (del) del.addEventListener("click", async () => {
+    if (!confirm("Move this account to the Recycle Bin? You have 24 hours to restore it from the Deleted tab.")) return;
+    try {
+      await api("/accounts", { method: "POST", body: JSON.stringify({ action: "delete", id: a.id }) });
+      closeModal();
+      loadAccounts();
+    } catch (err) { $("modal-error").textContent = err.message; }
   });
 }
 
@@ -458,6 +471,49 @@ $("add-product-btn").addEventListener("click", () => {
     loadInventory();
   });
 });
+
+// =================== ADMIN: RECYCLE BIN ===================
+let trashStoreName = {}; // store id -> name, to label deleted accounts
+function whenDeleted(ts) {
+  if (!ts) return "-";
+  return String(ts).slice(0, 16).replace("T", " ");
+}
+async function loadTrash() {
+  const d = await api("/admin/trash");
+  const stores = d.stores || [];
+  const accounts = d.accounts || [];
+  trashStoreName = {};
+  stores.forEach((s) => (trashStoreName[s.id] = s.name));
+  $("trash-stores-body").innerHTML = stores.length
+    ? stores.map((s) =>
+        "<tr><td>" + esc(s.name) + "</td><td>" + esc(s.phone || "-") + "</td><td>" + esc(whenDeleted(s.deleted_at)) +
+        '</td><td>' + trashBtn("restore", "store", s.id, "Restore", "go") +
+        trashBtn("purge", "store", s.id, "Delete permanently", "danger") + "</td></tr>").join("")
+    : '<tr><td colspan="4" class="muted">Recycle Bin is empty.</td></tr>';
+  $("trash-accounts-body").innerHTML = accounts.length
+    ? accounts.map((a) =>
+        "<tr><td>" + esc(a.username) + "</td><td>" + esc(a.full_name || "-") + "</td><td>" + esc(a.role) +
+        "</td><td>" + esc(whenDeleted(a.deleted_at)) + '</td><td>' +
+        trashBtn("restore", "account", a.id, "Restore", "go") +
+        trashBtn("purge", "account", a.id, "Delete permanently", "danger") + "</td></tr>").join("")
+    : '<tr><td colspan="5" class="muted">No deleted accounts.</td></tr>';
+}
+function trashBtn(action, kind, id, label, cls) {
+  return '<button class="btn-mini ' + (cls || "") + '" data-trash="' + action + '" data-kind="' + kind +
+    '" data-id="' + esc(id) + '">' + label + "</button>";
+}
+async function handleTrashClick(e) {
+  const b = e.target.closest("button[data-trash]");
+  if (!b) return;
+  const action = b.dataset.trash, kind = b.dataset.kind, id = b.dataset.id;
+  if (action === "purge" && !confirm("Delete this " + kind + " permanently? This cannot be undone.")) return;
+  try {
+    await api("/admin/trash", { method: "POST", body: JSON.stringify({ action, kind, id }) });
+    loadTrash();
+  } catch (err) { alert(err.message); }
+}
+$("trash-stores-body").addEventListener("click", handleTrashClick);
+$("trash-accounts-body").addEventListener("click", handleTrashClick);
 
 // =================== MODAL ===================
 let modalOk = null;

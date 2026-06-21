@@ -157,6 +157,68 @@ public final class CloudAccess {
         worker.start();
     }
 
+    /**
+     * Run an admin-only store action (activate / enable / disable / delete)
+     * against the cloud, then pull the change straight back down so the local
+     * database reflects it immediately. Returns true on success.
+     */
+    public static boolean adminStoreAction(AppContext context, String action, String remoteUuid) {
+        if (!CloudConfig.isConfigured() || CloudConfig.token() == null || remoteUuid == null) {
+            return false;
+        }
+        CloudClient client = new CloudClient(CloudConfig.apiBase());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("action", action);
+        body.put("id", remoteUuid);
+        client.post("/api/admin/stores", body, CloudConfig.token());
+        context.getCloudSync().syncOnce();
+        return true;
+    }
+
+    /**
+     * Run an account action (disable / enable / reset / delete) against the
+     * cloud, then pull the change back down. {@code password} may be null.
+     */
+    public static boolean accountAction(AppContext context, String action, String remoteUuid, String password) {
+        if (!CloudConfig.isConfigured() || CloudConfig.token() == null || remoteUuid == null) {
+            return false;
+        }
+        CloudClient client = new CloudClient(CloudConfig.apiBase());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("action", action);
+        body.put("id", remoteUuid);
+        if (password != null) {
+            body.put("password", password);
+        }
+        client.post("/api/accounts", body, CloudConfig.token());
+        context.getCloudSync().syncOnce();
+        return true;
+    }
+
+    /** Fetch the admin Recycle Bin (deleted stores + accounts) from the cloud. */
+    public static Map<String, Object> listTrash(AppContext context) {
+        if (!CloudConfig.isConfigured() || CloudConfig.token() == null) {
+            return new LinkedHashMap<>();
+        }
+        CloudClient client = new CloudClient(CloudConfig.apiBase());
+        return client.get("/api/admin/trash", CloudConfig.token());
+    }
+
+    /** Restore or permanently purge a Recycle Bin entry (kind = store|account). */
+    public static boolean trashAction(AppContext context, String action, String kind, String remoteUuid) {
+        if (!CloudConfig.isConfigured() || CloudConfig.token() == null || remoteUuid == null) {
+            return false;
+        }
+        CloudClient client = new CloudClient(CloudConfig.apiBase());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("action", action);
+        body.put("kind", kind);
+        body.put("id", remoteUuid);
+        client.post("/api/admin/trash", body, CloudConfig.token());
+        context.getCloudSync().syncOnce();
+        return true;
+    }
+
     private static String str(Object o) {
         return o == null ? null : o.toString();
     }

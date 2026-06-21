@@ -3,6 +3,7 @@ package com.smartbillingpro.ui.panels;
 import com.smartbillingpro.model.Role;
 import com.smartbillingpro.model.User;
 import com.smartbillingpro.service.AppContext;
+import com.smartbillingpro.service.CloudAccess;
 import com.smartbillingpro.ui.MainFrame;
 import com.smartbillingpro.ui.components.RoundedButton;
 import com.smartbillingpro.ui.components.RoundedPanel;
@@ -60,8 +61,11 @@ public class StaffPanel extends PanelBase {
         edit.addActionListener(e -> editSelected());
         RoundedButton toggle = new RoundedButton("Enable / Disable", Theme.withAlpha(Theme.ACCENT, 30), Theme.ACCENT);
         toggle.addActionListener(e -> toggleSelected());
+        RoundedButton delete = new RoundedButton("Delete", Theme.DANGER, Color.WHITE);
+        delete.addActionListener(e -> deleteSelected());
         bar.add(edit);
         bar.add(toggle);
+        bar.add(delete);
         container.add(bar, BorderLayout.SOUTH);
         setBody(container);
         reload();
@@ -101,12 +105,45 @@ public class StaffPanel extends PanelBase {
         reload();
     }
 
+    /** Move the selected staff member to the cloud Recycle Bin. */
+    private void deleteSelected() {
+        User user = selected();
+        if (user == null) {
+            JOptionPane.showMessageDialog(this, "Select a staff member to delete.");
+            return;
+        }
+        if (!CloudAccess.isConfigured()) {
+            JOptionPane.showMessageDialog(this,
+                    "Account deletion runs through the cloud, which is not configured on this device.");
+            return;
+        }
+        String remoteUuid = context.getAuthService().remoteUuid(user.getId());
+        if (remoteUuid == null) {
+            JOptionPane.showMessageDialog(this,
+                    "This account has not synced to the cloud yet, so it cannot be deleted online.");
+            return;
+        }
+        if (JOptionPane.showConfirmDialog(this,
+                "Move \"" + user.getUsername() + "\" to the Recycle Bin?\n"
+                        + "You have 24 hours to restore it before it is deleted for good.",
+                "Confirm Delete", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+        try {
+            CloudAccess.accountAction(context, "delete", remoteUuid, null);
+            reload();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Could not delete the staff member: " + ex.getMessage());
+        }
+    }
+
     private void reload() {
         rows.clear();
         model.setRowCount(0);
         for (User user : context.getAuthService().listUsersForStore(context.getCurrentStoreId())) {
-            if (user.getRole() == Role.OWNER) {
-                continue; // the owner manages staff but is not listed as their own staff
+            if (user.getRole() == Role.OWNER || user.getRole() == Role.ADMIN) {
+                continue; // the owner manages staff but is not listed as their own staff;
+                          // the global administrator is never part of a store's team
             }
             rows.add(user);
             model.addRow(new Object[] {user.getUsername(), user.getFullName(),

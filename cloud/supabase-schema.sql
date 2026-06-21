@@ -24,7 +24,8 @@ create table if not exists stores (
   owner_pending boolean not null default true,   -- true until the admin activates the owner
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
-  deleted       boolean not null default false
+  deleted       boolean not null default false,
+  deleted_at    timestamptz                       -- when it entered the Recycle Bin
 );
 
 -- ---------- USERS (staff accounts that log into the app AND the web) ----------
@@ -38,7 +39,8 @@ create table if not exists users (
   role          text not null,               -- ADMIN | OWNER | MANAGER | CASHIER
   active        boolean not null default true,
   updated_at    timestamptz not null default now(),
-  deleted       boolean not null default false
+  deleted       boolean not null default false,
+  deleted_at    timestamptz                       -- when it entered the Recycle Bin
 );
 
 -- ---------- SUPPLIERS ----------
@@ -196,6 +198,12 @@ create index if not exists idx_po_store_updated         on purchase_orders(store
 create index if not exists idx_poi_store_updated        on purchase_order_items(store_id, updated_at);
 create index if not exists idx_audit_store_updated      on audit_log(store_id, updated_at);
 create index if not exists idx_users_store_updated      on users(store_id, updated_at);
+
+-- ---------- Recycle Bin column (safe to re-run on an existing database) ----------
+alter table stores add column if not exists deleted_at timestamptz;
+alter table users  add column if not exists deleted_at timestamptz;
+create index if not exists idx_stores_deleted on stores(deleted, deleted_at);
+create index if not exists idx_users_deleted  on users(deleted, deleted_at);
 
 -- ---------- Auto-bump updated_at on every change ----------
 create or replace function set_updated_at() returns trigger as $$

@@ -39,7 +39,7 @@
     <aside class="sidebar">
       <div class="sidebar-brand">&#128722; <span>Smart Billing Pro</span></div>
       <nav id="sidebar-nav" class="sidebar-nav"></nav>
-      <div class="sidebar-foot">Online &bull; v3.2</div>
+      <div class="sidebar-foot">Online &bull; v3.3</div>
     </aside>
 
     <!-- Main column -->
@@ -128,6 +128,25 @@
               <tbody id="inventory-body"><tr><td colspan="7" class="muted">Loading...</td></tr></tbody>
             </table>
             <p id="inventory-msg" class="muted small"></p>
+          </div>
+        </section>
+
+        <!-- ADMIN: RECYCLE BIN (deleted stores + accounts, auto-purged after 24h) -->
+        <section id="trash-section" class="hidden">
+          <div class="panel">
+            <h2>Deleted stores</h2>
+            <p class="muted small">Deleted items are kept for 24 hours, then removed automatically. Restore them, or delete them permanently right now.</p>
+            <table class="data-table">
+              <thead><tr><th>Store</th><th>Phone</th><th>Deleted</th><th>Actions</th></tr></thead>
+              <tbody id="trash-stores-body"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody>
+            </table>
+          </div>
+          <div class="panel">
+            <h2>Deleted accounts</h2>
+            <table class="data-table">
+              <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Deleted</th><th>Actions</th></tr></thead>
+              <tbody id="trash-accounts-body"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+            </table>
           </div>
         </section>
 

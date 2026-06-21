@@ -4,6 +4,7 @@ import com.smartbillingpro.model.Role;
 import com.smartbillingpro.model.Store;
 import com.smartbillingpro.model.User;
 import com.smartbillingpro.service.AppContext;
+import com.smartbillingpro.service.CloudAccess;
 import com.smartbillingpro.ui.AdminFrame;
 import com.smartbillingpro.ui.Refreshable;
 import com.smartbillingpro.ui.components.RoundedButton;
@@ -75,6 +76,9 @@ public class UserPanel extends JPanel implements Refreshable {
         RoundedButton details = new RoundedButton("Details", Theme.withAlpha(Theme.ACCENT, 30), Theme.ACCENT);
         details.addActionListener(e -> openDetails());
         bar.add(details);
+        RoundedButton delete = new RoundedButton("Delete", Theme.DANGER, Color.WHITE);
+        delete.addActionListener(e -> deleteSelected());
+        bar.add(delete);
         container.add(bar, BorderLayout.SOUTH);
         add(container, BorderLayout.CENTER);
     }
@@ -124,6 +128,39 @@ public class UserPanel extends JPanel implements Refreshable {
             return;
         }
         openDialog(user);
+    }
+
+    /** Move the selected owner account to the cloud Recycle Bin. */
+    private void deleteSelected() {
+        User user = selected();
+        if (user == null) {
+            JOptionPane.showMessageDialog(this, "Select an account to delete.");
+            return;
+        }
+        if (!CloudAccess.isConfigured()) {
+            JOptionPane.showMessageDialog(this,
+                    "Account deletion runs through the cloud, which is not configured on this device.");
+            return;
+        }
+        String remoteUuid = context.getAuthService().remoteUuid(user.getId());
+        if (remoteUuid == null) {
+            JOptionPane.showMessageDialog(this,
+                    "This account has not synced to the cloud yet, so it cannot be deleted online.");
+            return;
+        }
+        if (JOptionPane.showConfirmDialog(this,
+                "Move \"" + user.getUsername() + "\" to the Recycle Bin?\n"
+                        + "You have 24 hours to restore it from the Deleted screen.",
+                "Confirm Delete", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+        try {
+            CloudAccess.accountAction(context, "delete", remoteUuid, null);
+            reload();
+            frame.refreshCurrent();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Could not delete the account: " + ex.getMessage());
+        }
     }
 
     /** Drill into a store owner's account: their staff, inventory and export. */

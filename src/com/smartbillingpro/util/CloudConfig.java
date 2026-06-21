@@ -144,8 +144,14 @@ public final class CloudConfig {
         if (token != null) {
             p.setProperty("token", token);
         }
+        // When signing in WITHOUT a store (e.g. the administrator), clear any
+        // store id left over from a previous owner login on this device. A stale
+        // value used to get stamped onto freshly created accounts, moving them to
+        // the wrong store.
         if (storeId != null) {
             p.setProperty("storeId", storeId);
+        } else {
+            p.remove("storeId");
         }
         save(p);
     }

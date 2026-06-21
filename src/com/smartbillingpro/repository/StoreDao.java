@@ -98,4 +98,20 @@ public class StoreDao {
             throw new DataAccessException("Failed to count stores: " + e.getMessage(), e);
         }
     }
+
+    /**
+     * The cloud uuid for this store, used by admin store actions. Returns null
+     * when the column is missing (cloud sync never ran) or the store has not
+     * synced yet.
+     */
+    public String remoteUuid(int id) {
+        try (PreparedStatement ps = db.connection().prepareStatement("SELECT remote_uuid FROM stores WHERE id = ?")) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        } catch (SQLException e) {
+            return null;
+        }
+    }
 }

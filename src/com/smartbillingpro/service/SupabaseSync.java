@@ -227,9 +227,22 @@ public class SupabaseSync {
                     }
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", uuid);
-                    row.put("local_id", hasColumn(rs, "id") ? (Object) rs.getInt("id") : (Object) rowid);
+                    // The cloud "settings" table has no local_id column (its key is
+                    // store_id), so sending one breaks the schema cache.
+                    if (!table.equals("settings")) {
+                        row.put("local_id", hasColumn(rs, "id") ? (Object) rs.getInt("id") : (Object) rowid);
+                    }
                     if (!table.equals("stores")) {
-                        row.put("store_id", cloudStore);
+                        // Resolve the cloud store uuid from the ROW's own local
+                        // store_id rather than the device's session store. The
+                        // admin device has no session store (and may hold a stale
+                        // one), so blindly stamping cloudStore moved freshly made
+                        // owner accounts onto the wrong store.
+                        String storeUuid = resolveStoreUuid(c, rs, cloudStore);
+                        if (storeUuid == null) {
+                            continue; // store not synced yet; retry next cycle
+                        }
+                        row.put("store_id", storeUuid);
                     }
                     for (String col : COLS.get(table)) {
                         row.put(col, getString(rs, col));
@@ -539,6 +552,27 @@ public class SupabaseSync {
                 ps.setString(idx, v.toString());
             }
         }
+    }
+
+    /**
+     * Finds the cloud uuid of the store a row belongs to, based on the row's own
+     * local {@code store_id}. Falls back to the session store only when the row
+     * has no usable local store id.
+     */
+    private String resolveStoreUuid(Connection c, ResultSet rs, String cloudStore) {
+        int localStoreId = 0;
+        try {
+            localStoreId = rs.getInt("store_id");
+        } catch (SQLException ignored) {
+            // table has no store_id column
+        }
+        if (localStoreId > 0) {
+            String u = lookupUuid(c, "stores", localStoreId);
+            if (u != null) {
+                return u;
+            }
+        }
+        return cloudStore;
     }
 
     private String lookupUuid(Connection c, String table, int localId) {

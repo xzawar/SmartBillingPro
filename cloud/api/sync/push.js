@@ -34,12 +34,15 @@ module.exports = async (req, res) => {
       // Force the row into the caller's store (except admin) so nobody can write
       // into another store.
       if (storeScope && table !== "stores") row.store_id = storeScope;
+      // The cloud "settings" table keys on store_id and has no local_id column.
+      if (table === "settings") delete row.local_id;
       const prev = existing[row.id];
       if (prev && new Date(prev) >= new Date(row.updated_at || 0)) { skipped++; continue; }
       toWrite.push(row);
     }
     if (toWrite.length) {
-      const { error } = await supabase.from(table).upsert(toWrite, { onConflict: "id" });
+      const conflictKey = table === "settings" ? "store_id" : "id";
+      const { error } = await supabase.from(table).upsert(toWrite, { onConflict: conflictKey });
       if (error) return res.status(500).json({ error: `${table}: ${error.message}` });
       applied += toWrite.length;
     }

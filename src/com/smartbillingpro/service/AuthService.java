@@ -76,4 +76,9 @@ public class AuthService {
         userDao.updatePassword(user.getId(), PasswordUtil.hash(newPassword));
         auditService.log("USER_PASSWORD", user.getUsername());
     }
+
+    /** Cloud uuid for an account (null when it has not synced yet). */
+    public String remoteUuid(int id) {
+        return userDao.remoteUuid(id);
+    }
 }

@@ -73,6 +73,18 @@ module.exports = async (req, res) => {
       if (e2) return res.status(500).json({ error: e2.message });
       return res.status(200).json({ ok: true, activated: true });
     }
+
+    if (action === "delete") {
+      // Soft delete the store AND its accounts so they all land in the Recycle
+      // Bin together. A scheduled purge (or "delete permanently") clears them.
+      const { error: e1 } = await supabase.from("stores")
+        .update({ deleted: true, deleted_at: now, updated_at: now }).eq("id", id);
+      if (e1) return res.status(500).json({ error: e1.message });
+      const { error: e2 } = await supabase.from("users")
+        .update({ deleted: true, deleted_at: now, active: false, updated_at: now }).eq("store_id", id);
+      if (e2) return res.status(500).json({ error: e2.message });
+      return res.status(200).json({ ok: true, deleted: true });
+    }
     return res.status(400).json({ error: "Unknown action." });
   }
   return res.status(405).json({ error: "Method not allowed." });

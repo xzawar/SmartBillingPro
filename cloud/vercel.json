@@ -3,6 +3,9 @@
   "rewrites": [
     { "source": "/", "destination": "/index.html" }
   ],
+  "crons": [
+    { "path": "/api/cron/purge", "schedule": "0 * * * *" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",

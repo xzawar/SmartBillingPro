@@ -133,4 +133,19 @@ public class UserDao {
             throw new DataAccessException("Failed to count users: " + e.getMessage(), e);
         }
     }
+
+    /**
+     * The cloud uuid for this account, used by account actions (delete, etc.).
+     * Returns null when the column is missing or the account has not synced yet.
+     */
+    public String remoteUuid(int id) {
+        try (PreparedStatement ps = db.connection().prepareStatement("SELECT remote_uuid FROM users WHERE id = ?")) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        } catch (SQLException e) {
+            return null;
+        }
+    }
 }

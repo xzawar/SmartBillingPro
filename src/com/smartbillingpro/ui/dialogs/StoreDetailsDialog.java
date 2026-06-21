@@ -1,8 +1,10 @@
 package com.smartbillingpro.ui.dialogs;
 
 import com.smartbillingpro.model.Product;
+import com.smartbillingpro.model.Role;
 import com.smartbillingpro.model.User;
 import com.smartbillingpro.service.AppContext;
+import com.smartbillingpro.service.CloudAccess;
 import com.smartbillingpro.ui.components.GradientPanel;
 import com.smartbillingpro.ui.components.RoundedButton;
 import com.smartbillingpro.ui.components.StatusCellRenderer;
@@ -97,11 +99,16 @@ public class StoreDetailsDialog extends JDialog {
         panel.setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
         staffTable.getColumnModel().getColumn(3).setCellRenderer(new StatusCellRenderer());
         panel.add(Ui.scroll(staffTable), BorderLayout.CENTER);
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
         bar.setOpaque(false);
-        RoundedButton toggle = new RoundedButton("Enable / Disable Account", Theme.withAlpha(Theme.ACCENT, 30), Theme.ACCENT);
+        RoundedButton toggle = new RoundedButton("Enable / Disable Account", Theme.PRIMARY, Color.WHITE);
+        toggle.setArc(26);
         toggle.addActionListener(e -> toggleStaff());
         bar.add(toggle);
+        RoundedButton delete = new RoundedButton("Delete Account", Theme.DANGER, Color.WHITE);
+        delete.setArc(26);
+        delete.addActionListener(e -> deleteStaff());
+        bar.add(delete);
         panel.add(bar, BorderLayout.SOUTH);
         return panel;
     }
@@ -116,9 +123,10 @@ public class StoreDetailsDialog extends JDialog {
         invSummary.setFont(Theme.regular(13));
         invSummary.setForeground(Theme.MUTED);
         bar.add(invSummary, BorderLayout.WEST);
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 4));
         buttons.setOpaque(false);
         RoundedButton export = new RoundedButton("Export Inventory (JSON)", Theme.SUCCESS, Color.WHITE);
+        export.setArc(26);
         export.addActionListener(e -> exportInventory());
         buttons.add(export);
         bar.add(buttons, BorderLayout.EAST);
@@ -138,10 +146,48 @@ public class StoreDetailsDialog extends JDialog {
         reloadStaff();
     }
 
+    /** Move the selected staff account to the cloud Recycle Bin. */
+    private void deleteStaff() {
+        int row = staffTable.getSelectedRow();
+        if (row < 0 || row >= staffRows.size()) {
+            JOptionPane.showMessageDialog(this, "Select an account to delete.");
+            return;
+        }
+        User user = staffRows.get(row);
+        if (!CloudAccess.isConfigured()) {
+            JOptionPane.showMessageDialog(this,
+                    "Account deletion runs through the cloud, which is not configured on this device.");
+            return;
+        }
+        String remoteUuid = context.getAuthService().remoteUuid(user.getId());
+        if (remoteUuid == null) {
+            JOptionPane.showMessageDialog(this,
+                    "This account has not synced to the cloud yet, so it cannot be deleted online.");
+            return;
+        }
+        if (JOptionPane.showConfirmDialog(this,
+                "Move \"" + user.getUsername() + "\" to the Recycle Bin?\n"
+                        + "You have 24 hours to restore it from the Deleted screen.",
+                "Confirm Delete", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+        try {
+            CloudAccess.accountAction(context, "delete", remoteUuid, null);
+            reloadStaff();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Could not delete the account: " + ex.getMessage());
+        }
+    }
+
     private void reloadStaff() {
         staffRows.clear();
         staffModel.setRowCount(0);
         for (User user : context.getAuthService().listUsersForStore(storeId)) {
+            // The built-in administrator is global, not part of any store's
+            // staff, so it should never appear in an owner's account list.
+            if (user.getRole() == Role.ADMIN) {
+                continue;
+            }
             staffRows.add(user);
             staffModel.addRow(new Object[] {user.getUsername(), user.getFullName(),
                     user.getRole().getLabel(), user.isActive() ? "Active" : "Disabled"});

@@ -2,6 +2,7 @@ package com.smartbillingpro.ui.panels;
 
 import com.smartbillingpro.model.Store;
 import com.smartbillingpro.service.AppContext;
+import com.smartbillingpro.service.CloudAccess;
 import com.smartbillingpro.ui.AdminFrame;
 import com.smartbillingpro.ui.Refreshable;
 import com.smartbillingpro.ui.components.RoundedButton;
@@ -65,6 +66,20 @@ public class StorePanel extends JPanel implements Refreshable {
         RoundedButton edit = new RoundedButton("Edit Store", Theme.withAlpha(Theme.PRIMARY, 30), Theme.PRIMARY);
         edit.addActionListener(e -> editSelected());
         bar.add(edit);
+        // Cloud-backed store controls (only meaningful when this device is the
+        // administrator signed in to the cloud console).
+        RoundedButton activate = new RoundedButton("Activate", Theme.SUCCESS, Color.WHITE);
+        activate.addActionListener(e -> storeAction("activate",
+                "Activate this store so its owner can use it?"));
+        bar.add(activate);
+        RoundedButton disable = new RoundedButton("Disable", Theme.withAlpha(Theme.WARNING, 30), Theme.WARNING);
+        disable.addActionListener(e -> storeAction("disable",
+                "Disable this store? Its accounts will be blocked from signing in."));
+        bar.add(disable);
+        RoundedButton delete = new RoundedButton("Delete", Theme.DANGER, Color.WHITE);
+        delete.addActionListener(e -> storeAction("delete",
+                "Move this store to the Recycle Bin? Its accounts go with it. You have 24 hours to restore it from the Deleted screen."));
+        bar.add(delete);
         container.add(bar, BorderLayout.SOUTH);
         add(container, BorderLayout.CENTER);
     }
@@ -114,6 +129,41 @@ public class StorePanel extends JPanel implements Refreshable {
             return;
         }
         openDialog(store);
+    }
+
+    /**
+     * Run an admin store action (activate / disable / delete) against the cloud
+     * for the selected store, then refresh from the pulled-back data.
+     */
+    private void storeAction(String action, String confirmMsg) {
+        Store store = selected();
+        if (store == null) {
+            JOptionPane.showMessageDialog(this, "Select a store first.");
+            return;
+        }
+        if (!CloudAccess.isConfigured()) {
+            JOptionPane.showMessageDialog(this,
+                    "Store activation and deletion run through the cloud, which is not configured on this device.");
+            return;
+        }
+        String remoteUuid = context.getStoreService().remoteUuid(store.getId());
+        if (remoteUuid == null) {
+            JOptionPane.showMessageDialog(this,
+                    "This store has not synced to the cloud yet, so it cannot be changed online.\n"
+                            + "Try again once the background sync has run.");
+            return;
+        }
+        if (JOptionPane.showConfirmDialog(this, confirmMsg, "Confirm",
+                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+        try {
+            CloudAccess.adminStoreAction(context, action, remoteUuid);
+            reload();
+            frame.refreshCurrent();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Could not " + action + " the store: " + ex.getMessage());
+        }
     }
 
     private void reload() {

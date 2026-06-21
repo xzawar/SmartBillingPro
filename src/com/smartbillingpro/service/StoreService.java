@@ -66,4 +66,9 @@ public class StoreService {
         storeDao.update(store);
         auditService.log("STORE_UPDATE", store.getName());
     }
+
+    /** Cloud uuid for a store (null when it has not synced yet). */
+    public String remoteUuid(int id) {
+        return storeDao.remoteUuid(id);
+    }
 }

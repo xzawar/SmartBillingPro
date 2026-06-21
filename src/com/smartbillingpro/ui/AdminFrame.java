@@ -6,6 +6,7 @@ import com.smartbillingpro.ui.components.GradientPanel;
 import com.smartbillingpro.ui.components.NavIcons;
 import com.smartbillingpro.ui.components.RoundedButton;
 import com.smartbillingpro.ui.components.SidebarButton;
+import com.smartbillingpro.ui.panels.RecycleBinPanel;
 import com.smartbillingpro.ui.panels.StorePanel;
 import com.smartbillingpro.ui.panels.UserPanel;
 import com.smartbillingpro.ui.theme.Theme;
@@ -110,9 +111,10 @@ public class AdminFrame extends JFrame {
     private void registerPanels() {
         addNav("stores", "stores", "Stores", new StorePanel(this, context));
         addNav("users", "users", "Store Owners", new UserPanel(this, context));
+        addNav("trash", "trash", "Deleted", new RecycleBinPanel(this, context));
 
         sidebar.add(Box.createVerticalGlue());
-        JLabel version = new JLabel("Admin \u2022 v3.1");
+        JLabel version = new JLabel("Admin \u2022 v3.2");
         version.setFont(Theme.regular(11));
         version.setForeground(Theme.SIDEBAR_TEXT);
         version.setAlignmentX(Component.LEFT_ALIGNMENT);

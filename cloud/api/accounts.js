@@ -28,6 +28,8 @@ module.exports = async (req, res) => {
   if (req.method === "GET") {
     let q = supabase.from("users").select("id,username,full_name,role,store_id,active").eq("deleted", false);
     if (tok.role === "OWNER") q = q.eq("store_id", tok.store_id);
+    // Never show the administrator account in a non-admin's account list.
+    if (tok.role !== "ADMIN") q = q.neq("role", "ADMIN");
     const { data, error } = await q.order("role");
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ accounts: data || [] });
@@ -67,6 +69,16 @@ module.exports = async (req, res) => {
     if (action === "reset") {
       if (!body.password) return res.status(400).json({ error: "New password required." });
       const { error } = await supabase.from("users").update({ password_hash: sha256(body.password), updated_at: new Date().toISOString() }).eq("id", body.id);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ ok: true });
+    }
+    if (action === "delete") {
+      // Soft delete: the account drops into the Recycle Bin for 24 hours, then a
+      // scheduled purge (or a manual "delete permanently") removes it for good.
+      if (target.role === "ADMIN") return res.status(403).json({ error: "The administrator account cannot be deleted." });
+      const { error } = await supabase.from("users")
+        .update({ deleted: true, deleted_at: new Date().toISOString(), active: false, updated_at: new Date().toISOString() })
+        .eq("id", body.id);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ ok: true });
     }

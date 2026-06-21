@@ -4,7 +4,7 @@
   --primary:#1E3A8A;--primary-dark:#172554;--accent:#5B21B6;--gold:#D4AF37;--gold-light:#F4D03F;
   --bg:#F0F4FF;--card:#fff;--text:#1F2937;--muted:#6B7280;--border:#E5E7EB;
   --danger:#EF4444;--warn:#F59E0B;--success:#10B981;
-  --sidebar:#172554;--sidebar-text:#A8B6E0;
+  --sidebar:#172554;--sidebar-hover:#1E3A8A;--sidebar-text:#CBD5F5;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -41,6 +41,7 @@ body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-ser
 .btn-mini{padding:4px 9px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:12px;margin-right:5px}
 .btn-mini.danger{color:var(--danger);border-color:#f6caca}
 .btn-mini.go{color:var(--success);border-color:#bce9d6}
+.btn-mini.warn{color:#92400e;border-color:#fde68a;background:#fffbeb}
 
 /* ---------- app shell: sidebar + main ---------- */
 .app-shell{display:flex;min-height:100vh}
