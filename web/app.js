@@ -14,7 +14,7 @@
  *                                    updatedAt }
  */
 
-const API_BASE = "http://localhost:8080"; // <-- change to your deployed backend URL
+const API_BASE = "https://smartbillingapi.vercel.app"; // <-- change to your deployed backend URL
 const POLL_MS = 5000;
 
 const $ = (id) => document.getElementById(id);
