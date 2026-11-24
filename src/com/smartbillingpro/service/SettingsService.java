@@ -2,7 +2,9 @@ package com.smartbillingpro.service;
 
 import com.smartbillingpro.db.AppException;
 import com.smartbillingpro.db.Db;
+import com.smartbillingpro.model.PaymentMethod;
 import com.smartbillingpro.repo.AuditRepo;
+import com.smartbillingpro.repo.ReferenceRepo;
 import com.smartbillingpro.repo.SettingsRepo;
 import com.smartbillingpro.util.Dates;
 import com.smartbillingpro.util.Money;
@@ -16,11 +18,13 @@ public final class SettingsService {
     private final Db db;
     private final SettingsRepo repo;
     private final AuditRepo audit;
+    private final ReferenceRepo refs;
     private Settings current;
 
-    public SettingsService(Db db, SettingsRepo repo, AuditRepo audit) {
+    public SettingsService(Db db, SettingsRepo repo, ReferenceRepo refs, AuditRepo audit) {
         this.db = db;
         this.repo = repo;
+        this.refs = refs;
         this.audit = audit;
         reload();
     }
@@ -103,5 +107,39 @@ public final class SettingsService {
 
     public boolean checkPin(String pin) {
         return !current.pinEnabled() || Passwords.verify(pin, current.pinHash());
+    }
+
+    // ------------------------------------------------------------ payment methods
+
+    public java.util.List<PaymentMethod> paymentMethods(boolean activeOnly) {
+        return refs.methods(activeOnly);
+    }
+
+    public long addPaymentMethod(String name, boolean cash) {
+        String n = name == null ? "" : name.trim();
+        if (n.isEmpty()) {
+            throw new AppException("Please enter a name for the payment method.");
+        }
+        if (refs.methods(false).stream().anyMatch(m -> m.name().equalsIgnoreCase(n))) {
+            throw new AppException("A payment method called \"" + n + "\" already exists.");
+        }
+        long id = refs.insertMethod(n, cash);
+        audit.log("PAYMENT_METHOD", "Added " + n);
+        return id;
+    }
+
+    public void updatePaymentMethod(long id, String name, boolean cash, boolean active) {
+        String n = name == null ? "" : name.trim();
+        if (n.isEmpty()) {
+            throw new AppException("Please enter a name for the payment method.");
+        }
+        if (refs.methods(false).stream().anyMatch(m -> m.id() != id && m.name().equalsIgnoreCase(n))) {
+            throw new AppException("A payment method called \"" + n + "\" already exists.");
+        }
+        if (!active && refs.methods(true).stream().filter(m -> m.id() != id).count() == 0) {
+            throw new AppException("At least one payment method must stay active.");
+        }
+        refs.updateMethod(id, n, cash, active);
+        audit.log("PAYMENT_METHOD", "Updated " + n + (active ? "" : " (hidden)"));
     }
 }

@@ -83,7 +83,7 @@ public final class AppContext implements AutoCloseable {
         SequenceRepo sequences = new SequenceRepo(db);
         HeldSaleRepo held = new HeldSaleRepo(db);
 
-        settings = new SettingsService(db, settingsRepo, audit);
+        settings = new SettingsService(db, settingsRepo, refs, audit);
         inventory = new InventoryService(db, productRepo, stockRepo, refs, audit);
         sales = new SaleService(db, saleRepo, productRepo, stockRepo, paymentRepo, ledgerRepo, partyRepo, refs,
                 sequences, held, audit, settings);
