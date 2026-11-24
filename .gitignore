@@ -1,0 +1,12 @@
+# build output
+out/
+out-test/
+build/
+dist/
+app-image/
+sources.txt
+*.class
+# local data (never commit shop data)
+*.db
+*.db-wal
+*.db-shm
