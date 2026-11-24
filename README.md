@@ -1,104 +1,73 @@
-# Smart Billing Pro
+# Smart Billing Pro — Offline POS
 
-A point-of-sale and inventory system for a real shop, built with Java Swing and
-an object-oriented design. It supports **multiple checkout counters sharing one
-database**, a barcode scanner + thermal receipt workflow, suppliers and purchase
-orders, cost/profit reporting, customer loyalty, returns/refunds, and staff
-logins with roles.
+A fast, fully **offline** point-of-sale and shop management app for Windows.
+One shop, one owner, one window. All data stays on the computer in a local
+SQLite database, with automatic daily backups. No internet connection, no
+online account and no server are needed.
 
----
+| | |
+|---|---|
+| **Sales (POS)** | Barcode scanning (USB scanners work anywhere in the window), search, category filters, product grid, variations (sizes…), sale by weight/volume (e.g. 250 g of a per-kg product), line & bill discounts, tax, hold/recall, cash/bank/other payment methods, change and part-payment on a customer's account, keyboard shortcuts |
+| **Inventory** | Categories, products with variations (own barcode, SKU, prices, stock each), units (pcs, kg, g, mg, L, ml, m, cm + custom), duplicate-barcode protection, pictures, low/out-of-stock alerts, stock adjustments with reasons, full stock movement history, archive instead of delete |
+| **Suppliers** | Supplier accounts, purchases (full / partial / credit), moving-average cost, purchase reversal, payments, statements |
+| **Ledgers** | Customer and supplier ledgers with running balances, payments, adjustments, reversals, PDF/Excel/print statements, expenses |
+| **Customers** | Accounts, purchase history, receipts, total paid, outstanding balance, receive payments; walk-in sales need no customer |
+| **Receipts** | Every sale stored; search by number/customer/date/method/status; preview, reprint, **PDF** (A4 or roll), **58 / 80 mm thermal** (driver or ESC/POS), returns & refunds |
+| **Reports** | 25 reports: daily/weekly/monthly/product/category/payment-method sales, returns, P&L, daily/monthly/product profit, stock, low/out of stock, valuation, movements, purchase history, customer/supplier balances, cash received, credit sales, payments made, cash book, expenses — all with date filters, search, PDF, CSV (Excel) and print |
+| **Dashboard** | Today's sales & profit, purchases, inventory value, products, low stock, customers, receivables, payables, sales trend, profit vs expenses, top products, category sales, stock overview — all from real data |
+| **Tools & Settings** | Store details, currency (PKR by default), date format, tax, receipt texts & numbering, printer setup + test print, payment methods, units, backup & restore, optional startup PIN, import from the previous version |
 
-## 1. Requirements
+## Install on Windows (no Java needed)
 
-- **Java JDK 17 or newer** - https://adoptium.net (the `java -version` command should work)
-- **SQLite JDBC driver** - one small `.jar` placed in the `lib/` folder (see below)
+Download **`SmartBillingPro-4.0.0-windows.zip`** from the latest
+*Build Windows app* run in the repository's **Actions** tab (or build it
+yourself, below), unzip it anywhere (e.g. `C:\SmartBillingPro`) and run
+`SmartBillingPro\SmartBillingPro.exe`. Pin it to the taskbar. The folder
+contains its own Java runtime.
 
-## 2. One-time setup: add the database driver
+Your data is stored in `%LOCALAPPDATA%\SmartBillingPro` and backups in
+`Documents\SmartBillingPro Backups` (changeable in *Tools & Settings*).
 
-1. Open https://github.com/xerial/sqlite-jdbc/releases
-2. Download the latest `sqlite-jdbc-x.x.x.x.jar`
-3. Copy it into the **`lib/`** folder of this project
+## Build it yourself
 
-That's it - the run scripts pick up everything in `lib/` automatically.
+Requires a JDK 17 or newer (e.g. [Temurin 21](https://adoptium.net)). All
+libraries are already in `lib/` and `resources/`.
 
-## 3. Run
+| Task | Windows | macOS / Linux |
+|---|---|---|
+| Run from source | `run.bat` | `./run.sh` |
+| Run the tests | `run-tests.bat` | `./run-tests.sh` |
+| Build the Windows app (`dist\SmartBillingPro\SmartBillingPro.exe` + zip; installer too if WiX 3 is installed) | `build-exe.bat` | — |
+| Build a portable Java bundle (+ native image for the current OS) | — | `./build.sh` |
 
-- **Windows:** double-click `run.bat`
-- **macOS / Linux:** run `./run.sh` in a terminal (you may need `chmod +x run.sh` first)
+The GitHub Actions workflow `.github/workflows/build-windows.yml` runs the
+tests and builds the Windows app on every push.
 
-The script compiles the source into `out/` and launches the app.
+## Documentation
 
-## 4. First login
+* [User guide](docs/USER-GUIDE.md) — daily use, barcodes, weights,
+  variations, returns, **backups & restore**, **printer setup**, shortcuts.
+* [Architecture & migration](docs/ARCHITECTURE.md) — what changed from the
+  online version, database design, data-integrity rules, design system,
+  testing, known limitations.
 
-| Username | Password   | Role          |
-|----------|------------|---------------|
-| `admin`  | `admin123` | Administrator |
-
-Change this password (and add staff) from **Staff** once you're in.
-
----
-
-## Multiple counters sharing data
-
-All data lives in a single SQLite database file. By default it is created at:
-
-```
-<your home folder>/.smartbillingpro/shop.db
-```
-
-To let several counters share the same data, put that `shop.db` file on a shared
-network drive that every till can reach, and point each computer at it by
-setting the `SMARTBILLING_DB` environment variable to the shared path before
-launching. SQLite is configured with WAL mode and a busy-timeout so concurrent
-tills can read and write safely.
-
-> Tip: for very high concurrency (many tills hammering the same file at once),
-> a client/server database is the long-term upgrade, but a shared SQLite file is
-> perfect for a single shop or a small mall unit.
-
-## Roles and permissions
-
-| Capability                | Admin | Manager | Cashier |
-|---------------------------|:-----:|:-------:|:-------:|
-| Make sales (POS)          |  Yes  |   Yes   |   Yes   |
-| Manage inventory          |  Yes  |   Yes   |    -    |
-| Suppliers & purchases     |  Yes  |   Yes   |    -    |
-| Reports (sales/profit)    |  Yes  |   Yes   |    -    |
-| Void / refund sales       |  Yes  |   Yes   |    -    |
-| Manage staff              |  Yes  |    -    |    -    |
-| Settings                  |  Yes  |    -    |    -    |
-
-## Hardware: scanner & receipt printer
-
-- **Barcode scanner:** USB scanners act as a keyboard. On the **New Sale**
-  screen, scanning types the code into the product search box and filters the
-  catalog instantly - just press Add to Cart.
-- **Thermal receipt printer:** receipts are formatted to a narrow 32-column
-  width. From the receipt preview window use **Print** (your OS print dialog),
-  and pick the thermal printer. Sales History can reprint any past receipt.
-
-## Returns & refunds
-
-Open **Sales History**, select a completed sale, then choose **Void**
-(cancel a mistake, full reversal) or **Refund** (customer return). Both restore
-stock automatically and ask for a reason that is saved in the audit log.
-
-> Partial returns (refunding only some lines) are not automated yet - process
-> them as a full refund followed by a fresh sale of the kept items.
-
-## What's inside (architecture)
+## Project layout
 
 ```
 src/com/smartbillingpro/
-  model/        plain data objects (Product, Invoice, User, ...)
-  repository/   database access (DAOs) over a single SQLite connection
-  service/      business logic (billing math, sales, reports, auth)
-  ui/           Swing screens, dialogs, reusable components, theme
-  SmartBillingApp.java   entry point
-lib/            put the SQLite JDBC driver jar here
-run.sh / run.bat        compile + launch helpers
+  app/       paths, local config, single-instance lock, wiring (AppContext)
+  db/        SQLite connection, versioned migrations, JDBC helper
+  model/     records: Product, Variant, Sale, LedgerEntry, ...
+  repo/      SQL only (one repository per area)
+  service/   business rules: Cart, SaleService, InventoryService, PartyService,
+             PurchaseService, ExpenseService, ReportService, DashboardService,
+             BackupService, LegacyImportService, SettingsService
+  print/     receipt/report layout, Java2D + PDF (PDFBox) canvases, ESC/POS,
+             printers, CSV/PDF export
+  ui/        FlatLaf Swing UI: MainFrame, pages/ (9 tabs), dialogs/, components
+  util/      Money (integer paisa), Qty (thousandths), Dates, Fonts, ...
+test/        self-contained test suite (no external test library)
+resources/   bundled Inter font (SIL OFL)
+packaging/   app icon
+lib/         sqlite-jdbc, FlatLaf, PDFBox (Apache 2.0)
 ```
-
-The layers are kept separate on purpose: UI talks to services, services talk to
-repositories, repositories talk to the database. Money is handled with
-`BigDecimal` throughout to avoid rounding errors.

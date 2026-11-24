@@ -9,10 +9,18 @@ import java.awt.RenderingHints;
 /** White rounded surface with a hairline border. */
 public class Card extends JPanel {
 
+    private boolean outlined = true;
+
     public Card(LayoutManager layout) {
         super(layout);
         setOpaque(false);
         setBackground(Theme.SURFACE);
+    }
+
+    /** Tinted cards separate by colour alone (no outline). */
+    public void setOutlined(boolean outlined) {
+        this.outlined = outlined;
+        repaint();
     }
 
     @Override
@@ -21,8 +29,10 @@ public class Card extends JPanel {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setColor(getBackground());
         g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Theme.RADIUS * 2, Theme.RADIUS * 2);
-        g2.setColor(Theme.BORDER);
-        g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Theme.RADIUS * 2, Theme.RADIUS * 2);
+        if (outlined) {
+            g2.setColor(Theme.BORDER);
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Theme.RADIUS * 2, Theme.RADIUS * 2);
+        }
         g2.dispose();
         super.paintComponent(g);
     }

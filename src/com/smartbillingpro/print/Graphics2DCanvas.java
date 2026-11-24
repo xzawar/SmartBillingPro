@@ -53,7 +53,13 @@ public final class Graphics2DCanvas implements DocCanvas {
     }
 
     private Font font(DocFont f) {
-        return fonts.computeIfAbsent(f, k -> new Font(FAMILY, k.bold() ? Font.BOLD : Font.PLAIN, 12).deriveFont(k.size()));
+        return fonts.computeIfAbsent(f, k -> {
+            Font base = k.bold() ? com.smartbillingpro.util.Fonts.semiBold() : com.smartbillingpro.util.Fonts.regular();
+            if (base != null) {
+                return base.deriveFont(Font.PLAIN, k.size());
+            }
+            return new Font(FAMILY, k.bold() ? Font.BOLD : Font.PLAIN, 12).deriveFont(k.size());
+        });
     }
 
     private FontMetrics fm(DocFont f) {

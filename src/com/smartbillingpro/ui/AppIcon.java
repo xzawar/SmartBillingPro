@@ -4,7 +4,6 @@ import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
@@ -27,7 +26,7 @@ public final class AppIcon {
         g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
         double s = size / 64.0;
         g.scale(s, s);
-        g.setPaint(new GradientPaint(0, 0, new Color(0x2F7BF0), 64, 64, new Color(0x1546A8)));
+        g.setColor(Theme.ACCENT_INK);
         g.fill(new RoundRectangle2D.Double(2, 2, 60, 60, 16, 16));
         Path2D r = new Path2D.Double();
         r.moveTo(19, 13);
@@ -40,9 +39,9 @@ public final class AppIcon {
         r.lineTo(23.3, 47.5);
         r.lineTo(19, 51);
         r.closePath();
-        g.setColor(Color.WHITE);
+        g.setColor(Theme.ACCENT);
         g.fill(r);
-        g.setColor(new Color(0x1F5FD1));
+        g.setColor(Theme.ACCENT_INK);
         g.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.drawLine(25, 23, 39, 23);
         g.drawLine(25, 30, 39, 30);

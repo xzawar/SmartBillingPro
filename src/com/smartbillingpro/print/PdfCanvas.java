@@ -40,7 +40,17 @@ public final class PdfCanvas implements DocCanvas, AutoCloseable {
     public PdfCanvas() {
         PDFont r = null;
         PDFont b = null;
-        for (String[] pair : FONT_CANDIDATES) {
+        try (java.io.InputStream ri = com.smartbillingpro.util.Fonts.open(com.smartbillingpro.util.Fonts.REGULAR_RESOURCE);
+             java.io.InputStream bi = com.smartbillingpro.util.Fonts.open(com.smartbillingpro.util.Fonts.SEMIBOLD_RESOURCE)) {
+            if (ri != null && bi != null) {
+                r = PDType0Font.load(doc, ri);
+                b = PDType0Font.load(doc, bi);
+            }
+        } catch (IOException | RuntimeException e) {
+            r = null;
+            b = null;
+        }
+        for (String[] pair : r != null ? new String[0][] : FONT_CANDIDATES) {
             if (new File(pair[0]).isFile() && new File(pair[1]).isFile()) {
                 try {
                     r = PDType0Font.load(doc, new File(pair[0]));

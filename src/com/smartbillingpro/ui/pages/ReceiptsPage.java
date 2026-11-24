@@ -162,7 +162,9 @@ public final class ReceiptsPage extends Page {
             table.setRows(rows);
             long total = rows.stream().mapToLong(s -> s.grandTotal() - s.returnedTotal()).sum();
             setSubtitle(rows.size() + " receipt(s)  •  net " + Money.format(total) + "  •  " + range.label());
-            if (current != null) {
+            if (current == null && !rows.isEmpty()) {
+                table.selectFirst();
+            } else if (current != null) {
                 long id = current.id();
                 rows.stream().filter(s -> s.id() == id).findFirst().ifPresentOrElse(s -> {
                     table.select(s);

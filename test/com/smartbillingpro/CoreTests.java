@@ -38,6 +38,7 @@ final class CoreTests {
     // ------------------------------------------------------------ pure maths
 
     static void testMoneyAndQty() {
+        Money.setSymbol("Rs");
         eq(125050L, Money.parse("1,250.50"), "parse grouped");
         eq(30000L, Money.parse("Rs 300"), "parse with symbol");
         eq("Rs 1,250.50", Money.format(125050), "format");
@@ -389,6 +390,45 @@ final class CoreTests {
             eq(1, ctx.sales().list(null, null, null, null, null, null, 10).size(), "sale persisted");
             eq("Ahmad General Store", ctx.settings().get().storeName(), "settings persisted");
             eq("INV-000002", ctx.sales().previewNextReceiptNo(), "numbering continues");
+        }
+    }
+
+    static void testLegacyImport() throws Exception {
+        Path dir = TestSupport.tempDir();
+        Path old = dir.resolve("shoppro.db");
+        try (java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:" + old);
+             java.sql.Statement st = c.createStatement()) {
+            st.execute("CREATE TABLE stores (id INTEGER PRIMARY KEY, name TEXT)");
+            st.execute("CREATE TABLE products (id INTEGER PRIMARY KEY, store_id INTEGER, sku TEXT, name TEXT, category TEXT, "
+                    + "cost_price TEXT, sale_price TEXT, quantity INTEGER, supplier_id INTEGER)");
+            st.execute("CREATE TABLE customers (id INTEGER PRIMARY KEY, store_id INTEGER, name TEXT, phone TEXT, address TEXT)");
+            st.execute("CREATE TABLE suppliers (id INTEGER PRIMARY KEY, store_id INTEGER, name TEXT, phone TEXT, address TEXT, notes TEXT)");
+            st.execute("CREATE TABLE settings (store_id INTEGER, business_name TEXT, address TEXT, phone TEXT, invoice_prefix TEXT, "
+                    + "currency_symbol TEXT, footer_message TEXT)");
+            st.execute("INSERT INTO stores VALUES (1, 'Old Shop'), (2, 'Other Shop')");
+            st.execute("INSERT INTO suppliers VALUES (7, 1, 'Old Supplier', '123', null, null)");
+            st.execute("INSERT INTO products VALUES (1, 1, '111', 'Pepsi', 'Drinks', '90', '120.50', 24, 7), "
+                    + "(2, 1, '111', 'Dup Code', 'Drinks', '1', '2', 3, null), (3, 1, '', 'Broken', '', 'x', '5', -2, null), "
+                    + "(4, 2, '999', 'Elsewhere', '', '1', '1', 1, null)");
+            st.execute("INSERT INTO customers VALUES (1, 1, 'Ali', '0300', 'Town')");
+            st.execute("INSERT INTO settings VALUES (1, 'Old Shop Ltd', 'Main Rd', '042', 'BILL', 'PKR', 'Thanks')");
+        }
+        try (AppContext ctx = TestSupport.newContext(dir.resolve("new"))) {
+            var stores = ctx.legacyImport().scan(old.toFile());
+            eq(2, stores.size(), "two stores found");
+            var shop = stores.stream().filter(s -> s.id() == 1).findFirst().orElseThrow();
+            var r = ctx.legacyImport().importStore(old.toFile(), shop);
+            eq(3, r.products(), "products of store 1 only");
+            eq(1, r.customers(), "customers");
+            eq(1, r.suppliers(), "suppliers");
+            SellableItem pepsi = ctx.inventory().findByCode("111");
+            eq("Pepsi", pepsi.productName(), "barcode carried over");
+            eq(money("120.50"), pepsi.salePrice(), "price converted to minor units");
+            eq(Qty.of(24), pepsi.stockQty(), "stock as opening movement");
+            eq("Old Shop Ltd", ctx.settings().get().storeName(), "shop name");
+            eq("BILL", ctx.settings().get().receiptPrefix(), "receipt prefix");
+            check(r.notes().stream().anyMatch(n -> n.contains("Duplicate code 111")), "duplicate code reported");
+            fails(() -> ctx.legacyImport().importStore(old.toFile(), shop), "empty shop");
         }
     }
 }

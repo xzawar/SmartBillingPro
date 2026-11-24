@@ -43,7 +43,7 @@ public final class Icons {
                 g2.translate(x, y);
                 g2.scale(size / 24.0, size / 24.0);
                 g2.setColor(c != null && !c.isEnabled() ? Theme.alpha(color, 110) : color);
-                g2.setStroke(new BasicStroke(1.9f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND));
                 draw(g2, name);
                 g2.dispose();
             }

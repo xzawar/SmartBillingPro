@@ -34,7 +34,7 @@ public final class Ui {
     /** Meaning of a status colour. Always shown with text. */
     public enum Tone {
         GOOD(Theme.GOOD, Theme.GOOD_SOFT), WARN(Theme.WARN, Theme.WARN_SOFT), BAD(Theme.BAD, Theme.BAD_SOFT),
-        INFO(Theme.PRIMARY, Theme.PRIMARY_SOFT), NEUTRAL(Theme.TEXT_2, new Color(0xEEF1F5));
+        INFO(Theme.INFO, Theme.INFO_SOFT), NEUTRAL(Theme.TEXT_2, Theme.NEUTRAL_SOFT);
 
         public final Color fg;
         public final Color bg;
@@ -61,41 +61,55 @@ public final class Ui {
         return b;
     }
 
-    /** The one prominent action of a screen or dialog. */
+    /** The one prominent action of a screen or dialog: lime pill with deep ink text. */
     public static JButton primary(String text, String icon) {
-        JButton b = button(text, icon, Color.WHITE);
-        b.putClientProperty(FlatClientProperties.STYLE, "background:" + Theme.hex(Theme.PRIMARY)
-                + ";foreground:#ffffff;hoverBackground:" + Theme.hex(Theme.PRIMARY_HOVER)
-                + ";pressedBackground:#17459a;borderWidth:0;focusWidth:0;font:bold;margin:7,16,7,16");
+        JButton b = button(text, icon, Theme.ACCENT_INK);
+        b.putClientProperty(FlatClientProperties.STYLE, "arc:999;background:" + Theme.hex(Theme.ACCENT)
+                + ";foreground:" + Theme.hex(Theme.ACCENT_INK) + ";hoverBackground:" + Theme.hex(Theme.ACCENT_HOVER)
+                + ";pressedBackground:" + Theme.hex(Theme.ACCENT_PRESSED) + ";borderWidth:0;focusWidth:0;"
+                + "disabledBackground:#eeefe9;disabledText:#9a9c96;margin:8,20,8,20");
+        b.setFont(Theme.bold(14));
         return b;
     }
 
-    /** Large green confirm button (Complete Sale). */
+    /** The large confirm action of the till (Complete Sale). */
     public static JButton success(String text, String icon) {
-        JButton b = button(text, icon, Color.WHITE);
-        b.putClientProperty(FlatClientProperties.STYLE, "background:#15803d;foreground:#ffffff;hoverBackground:#126b33;"
-                + "pressedBackground:#0f5a2b;borderWidth:0;focusWidth:0;font:bold +4;arc:10;margin:12,18,12,18");
+        JButton b = button(text, icon, Theme.ACCENT_INK);
+        b.putClientProperty(FlatClientProperties.STYLE, "arc:999;background:" + Theme.hex(Theme.ACCENT)
+                + ";foreground:" + Theme.hex(Theme.ACCENT_INK) + ";hoverBackground:" + Theme.hex(Theme.ACCENT_HOVER)
+                + ";pressedBackground:" + Theme.hex(Theme.ACCENT_PRESSED) + ";borderWidth:0;focusWidth:0;"
+                + "disabledBackground:#eeefe9;disabledText:#9a9c96;margin:14,20,14,20");
+        b.setFont(Theme.bold(17));
         return b;
     }
 
+    /** Quiet pill on a neutral tint. */
     public static JButton secondary(String text, String icon) {
-        JButton b = button(text, icon, Theme.TEXT_2);
-        b.putClientProperty(FlatClientProperties.STYLE, "background:#ffffff;foreground:" + Theme.hex(Theme.TEXT)
-                + ";borderColor:" + Theme.hex(Theme.BORDER_STRONG) + ";hoverBackground:#f3f5f8;focusWidth:0;margin:7,14,7,14");
+        JButton b = button(text, icon, Theme.ACCENT_INK);
+        b.putClientProperty(FlatClientProperties.STYLE, "arc:999;background:" + Theme.hex(Theme.NEUTRAL_FILL)
+                + ";foreground:" + Theme.hex(Theme.ACCENT_INK) + ";hoverBackground:#e2e4da;pressedBackground:#d8dacf;"
+                + "borderWidth:0;focusWidth:0;disabledText:#a3a59f;margin:8,16,8,16");
+        b.setFont(Theme.bold(13));
         return b;
     }
 
+    /** Text-only action. */
     public static JButton ghost(String text, String icon) {
         JButton b = button(text, icon, Theme.TEXT_2);
         b.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
-        b.putClientProperty(FlatClientProperties.STYLE, "foreground:" + Theme.hex(Theme.TEXT_2) + ";margin:6,10,6,10");
+        b.putClientProperty(FlatClientProperties.STYLE, "arc:999;foreground:" + Theme.hex(Theme.TEXT_2)
+                + ";hoverBackground:" + Theme.hex(Theme.NAV_HOVER) + ";margin:7,12,7,12");
+        b.setFont(Theme.bold(13));
         return b;
     }
 
+    /** Destructive action (negative secondary). */
     public static JButton danger(String text, String icon) {
         JButton b = button(text, icon, Theme.BAD);
-        b.putClientProperty(FlatClientProperties.STYLE, "background:#ffffff;foreground:" + Theme.hex(Theme.BAD)
-                + ";borderColor:#f0b4b4;hoverBackground:" + Theme.hex(Theme.BAD_SOFT) + ";focusWidth:0;margin:7,14,7,14");
+        b.putClientProperty(FlatClientProperties.STYLE, "arc:999;background:" + Theme.hex(Theme.BAD_SOFT)
+                + ";foreground:" + Theme.hex(Theme.BAD) + ";hoverBackground:#f6d9da;pressedBackground:#f0c9ca;"
+                + "borderWidth:0;focusWidth:0;margin:8,16,8,16");
+        b.setFont(Theme.bold(13));
         return b;
     }
 
@@ -112,28 +126,28 @@ public final class Ui {
 
     public static JLabel title(String text) {
         JLabel l = new JLabel(text);
-        l.setFont(Theme.bold(22));
+        l.setFont(Theme.bold(26));
         l.setForeground(Theme.TEXT);
         return l;
     }
 
     public static JLabel heading(String text) {
         JLabel l = new JLabel(text);
-        l.setFont(Theme.bold(15));
+        l.setFont(Theme.bold(16));
         l.setForeground(Theme.TEXT);
         return l;
     }
 
     public static JLabel label(String text) {
         JLabel l = new JLabel(text);
-        l.setFont(Theme.bold(12));
+        l.setFont(Theme.bold(13));
         l.setForeground(Theme.TEXT_2);
         return l;
     }
 
     public static JLabel muted(String text) {
         JLabel l = new JLabel(text);
-        l.setFont(Theme.font(12));
+        l.setFont(Theme.font(13));
         l.setForeground(Theme.MUTED);
         return l;
     }
@@ -153,7 +167,7 @@ public final class Ui {
         };
         setTone(l, tone);
         l.setFont(Theme.bold(11));
-        l.setBorder(BorderFactory.createEmptyBorder(3, 9, 3, 9));
+        l.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
         l.setOpaque(false);
         return l;
     }
@@ -277,20 +291,28 @@ public final class Ui {
 
     // ------------------------------------------------------------ layout
 
-    /** Label above field. */
+    /** Label above field. The field keeps its natural height even in a grid. */
     public static JPanel row(String label, JComponent field) {
-        JPanel p = new JPanel(new BorderLayout(0, 5));
-        p.setOpaque(false);
-        p.add(label(label), BorderLayout.NORTH);
-        p.add(field, BorderLayout.CENTER);
-        return p;
+        return row(label, field, null);
     }
 
     public static JPanel row(String label, JComponent field, String hint) {
-        JPanel p = row(label, field);
-        JLabel h = muted(hint);
-        h.setFont(Theme.font(11));
-        p.add(h, BorderLayout.SOUTH);
+        JPanel p = new JPanel(new BorderLayout(0, 5));
+        p.setOpaque(false);
+        p.add(label(label), BorderLayout.NORTH);
+        JPanel holder = new JPanel(new BorderLayout(0, 3));
+        holder.setOpaque(false);
+        if (field instanceof JScrollPane sp && sp.getBorder() instanceof javax.swing.border.EmptyBorder) {
+            sp.setBorder(BorderFactory.createLineBorder(Theme.BORDER_STRONG));
+        }
+        holder.add(field, BorderLayout.NORTH);
+        if (hint != null) {
+            JLabel h = muted(hint);
+            h.setFont(Theme.font(11));
+            h.setVerticalAlignment(SwingConstants.TOP);
+            holder.add(h, BorderLayout.CENTER);
+        }
+        p.add(holder, BorderLayout.CENTER);
         return p;
     }
 

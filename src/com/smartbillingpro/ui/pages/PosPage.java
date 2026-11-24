@@ -209,8 +209,10 @@ public final class PosPage extends Page {
     private void addChip(String text, Long id) {
         JToggleButton b = new JToggleButton(text);
         b.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_ROUND_RECT);
-        b.putClientProperty(FlatClientProperties.STYLE, "selectedBackground:" + Theme.hex(Theme.PRIMARY)
-                + ";selectedForeground:#ffffff;background:#ffffff;focusWidth:0;margin:4,12,4,12");
+        b.putClientProperty(FlatClientProperties.STYLE, "arc:999;selectedBackground:" + Theme.hex(Theme.ACCENT_INK)
+                + ";selectedForeground:#ffffff;background:#ffffff;borderColor:" + Theme.hex(Theme.BORDER)
+                + ";hoverBackground:" + Theme.hex(Theme.NAV_HOVER) + ";focusWidth:0;margin:5,14,5,14");
+        b.setFont(Theme.bold(13));
         b.setFocusable(false);
         b.setSelected(java.util.Objects.equals(id, categoryFilter));
         b.addActionListener(e -> {
@@ -282,9 +284,9 @@ public final class PosPage extends Page {
             long min = vs.isEmpty() ? 0 : vs.get(0).minStock();
             StockStatus st = StockStatus.of(stock, min);
             g2.setColor(Theme.SURFACE);
-            g2.fillRoundRect(2, 2, w, h, 14, 14);
-            g2.setColor(selected ? Theme.PRIMARY : Theme.BORDER);
-            g2.drawRoundRect(2, 2, w, h, 14, 14);
+            g2.fillRoundRect(2, 2, w, h, 20, 20);
+            g2.setColor(selected ? Theme.ACCENT_INK : Theme.BORDER);
+            g2.drawRoundRect(2, 2, w, h, 20, 20);
             g2.setFont(Theme.bold(13));
             g2.setColor(st == StockStatus.OUT ? Theme.MUTED : Theme.TEXT);
             List<String> lines = wrap(g2, product.name(), w - 18, 2);
@@ -306,7 +308,7 @@ public final class PosPage extends Page {
             g2.setColor(tone.fg);
             g2.drawString(badge, 17, h - 36);
             g2.setFont(Theme.bold(14));
-            g2.setColor(st == StockStatus.OUT ? Theme.MUTED : Theme.PRIMARY);
+            g2.setColor(st == StockStatus.OUT ? Theme.MUTED : Theme.TEXT);
             String price;
             if (vs.size() > 1) {
                 long lo = vs.stream().mapToLong(Variant::salePrice).min().orElse(0);
@@ -447,13 +449,14 @@ public final class PosPage extends Page {
         c.gridy++;
         south.add(taxRow, c);
 
-        JPanel totalPanel = new JPanel(new BorderLayout());
-        totalPanel.setBackground(Theme.PRIMARY_SOFT);
-        totalPanel.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+        Card totalPanel = new Card(new BorderLayout());
+        totalPanel.setOutlined(false);
+        totalPanel.setBackground(Theme.SURFACE_ALT);
+        totalPanel.setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 14));
         JLabel tl = new JLabel("TOTAL");
         tl.setFont(Theme.bold(15));
         tl.setForeground(Theme.TEXT);
-        totalValue.setFont(Theme.bold(28));
+        totalValue.setFont(Theme.heavy(30));
         totalValue.setForeground(Theme.TEXT);
         totalPanel.add(tl, BorderLayout.WEST);
         totalPanel.add(totalValue, BorderLayout.EAST);

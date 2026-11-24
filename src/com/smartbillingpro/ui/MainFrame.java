@@ -17,6 +17,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -85,8 +86,10 @@ public final class MainFrame extends JFrame {
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         setIconImages(AppIcon.images());
         setMinimumSize(new Dimension(980, 640));
-        setSize(1366, 820);
+        java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        setSize(Math.min(1366, screen.width), Math.min(820, screen.height));
         setLocationRelativeTo(null);
+        setExtendedState(MAXIMIZED_BOTH);
 
         JPanel root = new JPanel(new BorderLayout());
         root.add(buildSidebar(), BorderLayout.WEST);
@@ -125,6 +128,12 @@ public final class MainFrame extends JFrame {
         return ctx;
     }
 
+    private void setStoreName(String name) {
+        String safe = name == null ? "" : name.replace("&", "&amp;").replace("<", "&lt;");
+        storeName.setText("<html><div style='width:150px'>" + safe + "</div></html>");
+        storeName.setToolTipText(name);
+    }
+
     private void buildPages() {
         for (Page p : pages.values()) {
             content.remove(p);
@@ -140,13 +149,13 @@ public final class MainFrame extends JFrame {
         pages.put(REPORTS, new ReportsPage(this));
         pages.put(SETTINGS, new SettingsPage(this));
         pages.forEach((k, p) -> content.add(p, k));
-        storeName.setText(ctx.settings().get().storeName());
+        setStoreName(ctx.settings().get().storeName());
     }
 
     /** Rebuild every screen (after a restore or a settings change that affects formatting). */
     public void reloadAll(String showKey) {
         buildPages();
-        storeName.setText(ctx.settings().get().storeName());
+        setStoreName(ctx.settings().get().storeName());
         current = null;
         show(showKey);
         updateBackupStatus();
@@ -177,7 +186,7 @@ public final class MainFrame extends JFrame {
     }
 
     public void storeNameChanged() {
-        storeName.setText(ctx.settings().get().storeName());
+        setStoreName(ctx.settings().get().storeName());
     }
 
     // ------------------------------------------------------------ sidebar
@@ -185,18 +194,19 @@ public final class MainFrame extends JFrame {
     private Component buildSidebar() {
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
         sidebar.setBackground(Theme.NAV);
-        sidebar.setBorder(BorderFactory.createEmptyBorder(16, 10, 14, 10));
+        sidebar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, Theme.BORDER),
+                BorderFactory.createEmptyBorder(18, 12, 14, 12)));
         JPanel brand = new JPanel(new BorderLayout(10, 0));
         brand.setOpaque(false);
         brand.setAlignmentX(Component.LEFT_ALIGNMENT);
-        brand.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+        brand.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
         JLabel logo = new JLabel(AppIcon.icon(34));
         brand.add(logo, BorderLayout.WEST);
-        storeName.setFont(Theme.bold(14));
-        storeName.setForeground(Color.WHITE);
+        storeName.setFont(Theme.bold(15));
+        storeName.setForeground(Theme.TEXT);
         JLabel app = new JLabel("Smart Billing Pro");
-        app.setFont(Theme.font(11));
-        app.setForeground(Theme.NAV_TEXT);
+        app.setFont(Theme.font(12));
+        app.setForeground(Theme.MUTED);
         JPanel names = new JPanel(new BorderLayout());
         names.setOpaque(false);
         names.add(storeName, BorderLayout.NORTH);
@@ -204,7 +214,7 @@ public final class MainFrame extends JFrame {
         brand.add(names, BorderLayout.CENTER);
         brand.putClientProperty("names", names);
         sidebar.add(brand);
-        sidebar.add(Box.createVerticalStrut(18));
+        sidebar.add(Box.createVerticalStrut(22));
         for (int i = 0; i < NAV.length; i++) {
             String[] n = NAV[i];
             NavButton b = new NavButton(n[1], n[2], "Ctrl+" + (i + 1));
@@ -215,12 +225,12 @@ public final class MainFrame extends JFrame {
         }
         sidebar.add(Box.createVerticalGlue());
         JLabel version = new JLabel("Offline • v" + AppPaths.VERSION);
-        version.setFont(Theme.font(11));
-        version.setForeground(Theme.NAV_TEXT);
+        version.setFont(Theme.font(12));
+        version.setForeground(Theme.MUTED);
         version.setAlignmentX(Component.LEFT_ALIGNMENT);
         version.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
         sidebar.add(version);
-        sidebar.setPreferredSize(new Dimension(220, 0));
+        sidebar.setPreferredSize(new Dimension(232, 0));
         return sidebar;
     }
 
@@ -229,7 +239,7 @@ public final class MainFrame extends JFrame {
             return;
         }
         compact = c;
-        sidebar.setPreferredSize(new Dimension(c ? 66 : 220, 0));
+        sidebar.setPreferredSize(new Dimension(c ? 70 : 232, 0));
         for (Component comp : sidebar.getComponents()) {
             if (comp instanceof JPanel p && p.getClientProperty("names") instanceof JPanel names) {
                 names.setVisible(!c);
@@ -255,18 +265,18 @@ public final class MainFrame extends JFrame {
             this.icon = icon;
             setToolTipText(label + "  (" + shortcut + ")");
             setHorizontalAlignment(SwingConstants.LEFT);
-            setFont(Theme.bold(13));
+            setFont(Theme.font(14));
             setForeground(Theme.NAV_TEXT);
-            setIcon(Icons.get(icon, 19, Theme.NAV_TEXT));
+            setIcon(Icons.get(icon, 20, Theme.NAV_TEXT));
             setIconTextGap(12);
             setContentAreaFilled(false);
             setBorderPainted(false);
             setFocusPainted(false);
             setOpaque(false);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 10));
+            setBorder(BorderFactory.createEmptyBorder(11, 14, 11, 10));
             setAlignmentX(Component.LEFT_ALIGNMENT);
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
             getModel().addChangeListener(e -> repaint());
         }
 
@@ -274,7 +284,8 @@ public final class MainFrame extends JFrame {
             active = a;
             Color c = a ? Theme.NAV_TEXT_ACTIVE : Theme.NAV_TEXT;
             setForeground(c);
-            setIcon(Icons.get(icon, 19, c));
+            setFont(a ? Theme.bold(14) : Theme.font(14));
+            setIcon(Icons.get(icon, 20, c));
             getAccessibleContext().setAccessibleDescription(a ? "current page" : null);
             repaint();
         }
@@ -290,12 +301,10 @@ public final class MainFrame extends JFrame {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             if (active) {
                 g2.setColor(Theme.NAV_ACTIVE);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.setColor(new Color(0x5B9BFF));
-                g2.fillRoundRect(0, 9, 3, getHeight() - 18, 3, 3);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
             } else if (getModel().isRollover()) {
                 g2.setColor(Theme.NAV_HOVER);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
             }
             g2.dispose();
             super.paintComponent(g);
@@ -308,7 +317,7 @@ public final class MainFrame extends JFrame {
         JPanel bar = new JPanel(new BorderLayout());
         bar.setBackground(Theme.SURFACE);
         bar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER),
-                BorderFactory.createEmptyBorder(8, 22, 8, 16)));
+                BorderFactory.createEmptyBorder(10, 26, 10, 20)));
         clock.setFont(Theme.font(13));
         clock.setForeground(Theme.TEXT_2);
         bar.add(clock, BorderLayout.WEST);
@@ -325,8 +334,52 @@ public final class MainFrame extends JFrame {
         lock.addActionListener(e -> lockScreen());
         lock.setVisible(ctx.settings().get().pinEnabled());
         bar.putClientProperty("lock", lock);
-        bar.add(Ui.flowRight(10, backupChip, lock), BorderLayout.EAST);
+        bar.add(Ui.flowRight(12, backupChip, lock, ownerChip()), BorderLayout.EAST);
         return bar;
+    }
+
+    /** Avatar with the shop's initials - there is one owner and no login. */
+    private JComponent ownerChip() {
+        JLabel avatar = new JLabel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g2.setColor(Theme.ACCENT_INK);
+                g2.fillOval(0, 0, 34, 34);
+                g2.setColor(Theme.ACCENT);
+                g2.setFont(Theme.bold(13));
+                String in = initials(ctx.settings().get().storeName());
+                java.awt.FontMetrics fm = g2.getFontMetrics();
+                g2.drawString(in, (34 - fm.stringWidth(in)) / 2, 17 + fm.getAscent() / 2 - 2);
+                g2.dispose();
+            }
+        };
+        avatar.setPreferredSize(new Dimension(34, 34));
+        JLabel name = new JLabel("Owner");
+        name.setFont(Theme.bold(13));
+        JLabel role = Ui.muted("Offline \u2022 this PC");
+        role.setFont(Theme.font(11));
+        JPanel text = new JPanel(new BorderLayout());
+        text.setOpaque(false);
+        text.add(name, BorderLayout.NORTH);
+        text.add(role, BorderLayout.SOUTH);
+        JPanel chip = new JPanel(new BorderLayout(8, 0));
+        chip.setOpaque(false);
+        chip.add(avatar, BorderLayout.WEST);
+        chip.add(text, BorderLayout.CENTER);
+        return chip;
+    }
+
+    private static String initials(String name) {
+        StringBuilder sb = new StringBuilder();
+        for (String w : (name == null ? "" : name).trim().split("\\s+")) {
+            if (!w.isEmpty() && Character.isLetterOrDigit(w.charAt(0)) && sb.length() < 2) {
+                sb.append(Character.toUpperCase(w.charAt(0)));
+            }
+        }
+        return sb.length() == 0 ? "SB" : sb.toString();
     }
 
     private void tick() {

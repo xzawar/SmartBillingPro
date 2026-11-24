@@ -26,14 +26,15 @@ public final class Toast {
         }
         JLayeredPane layers = root.getLayeredPane();
         String iconName = tone == Ui.Tone.GOOD ? "check" : tone == Ui.Tone.BAD ? "warning" : "info";
-        JLabel label = new JLabel(message, Icons.get(iconName, 18, java.awt.Color.WHITE), JLabel.LEFT) {
+        java.awt.Color iconColor = tone == Ui.Tone.BAD ? new java.awt.Color(0xFFA8AD)
+                : tone == Ui.Tone.GOOD ? Theme.ACCENT : java.awt.Color.WHITE;
+        JLabel label = new JLabel(message, Icons.get(iconName, 18, iconColor), JLabel.LEFT) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(tone == Ui.Tone.BAD ? Theme.BAD : tone == Ui.Tone.GOOD ? new java.awt.Color(0x14532D)
-                        : new java.awt.Color(0x111827));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+                g2.setColor(Theme.TEXT);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
                 g2.dispose();
                 super.paintComponent(g);
             }
@@ -41,7 +42,7 @@ public final class Toast {
         label.setForeground(java.awt.Color.WHITE);
         label.setFont(Theme.bold(13));
         label.setIconTextGap(10);
-        label.setBorder(BorderFactory.createEmptyBorder(11, 16, 11, 18));
+        label.setBorder(BorderFactory.createEmptyBorder(12, 20, 12, 22));
         Dimension d = label.getPreferredSize();
         int w = Math.min(d.width, layers.getWidth() - 40);
         label.setBounds((layers.getWidth() - w) / 2, layers.getHeight() - d.height - 28, w, d.height);

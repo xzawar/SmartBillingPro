@@ -4,7 +4,7 @@ import com.smartbillingpro.service.DashboardService;
 import com.smartbillingpro.service.ReportService;
 import com.smartbillingpro.ui.BarList;
 import com.smartbillingpro.ui.Card;
-import com.smartbillingpro.ui.ColumnChart;
+import com.smartbillingpro.ui.LineChart;
 import com.smartbillingpro.ui.DateRangeBar;
 import com.smartbillingpro.ui.MainFrame;
 import com.smartbillingpro.ui.Page;
@@ -37,18 +37,18 @@ public final class DashboardPage extends Page {
     private final DateRangeBar range = new DateRangeBar(DateRangeBar.Preset.LAST_30);
     private final JComboBox<String> grouping = new JComboBox<>(new String[] {"Daily", "Weekly", "Monthly"});
 
-    private final StatCard todaySales = new StatCard("Today's sales", "sales");
-    private final StatCard todayProfit = new StatCard("Today's profit", "money");
-    private final StatCard purchases = new StatCard("Purchases", "suppliers");
-    private final StatCard inventoryValue = new StatCard("Inventory value", "inventory");
-    private final StatCard products = new StatCard("Products", "inventory");
-    private final StatCard lowStock = new StatCard("Low / out of stock", "warning");
-    private final StatCard customers = new StatCard("Customers", "customers");
-    private final StatCard receivable = new StatCard("Customers owe you", "ledgers");
-    private final StatCard payable = new StatCard("You owe suppliers", "ledgers");
+    private final StatCard todaySales = new StatCard("Today's sales", "sales", Theme.Tint.GREEN);
+    private final StatCard todayProfit = new StatCard("Today's profit", "money", Theme.Tint.TEAL);
+    private final StatCard purchases = new StatCard("Purchases", "suppliers", Theme.Tint.ORANGE);
+    private final StatCard inventoryValue = new StatCard("Inventory value", "inventory", Theme.Tint.BLUE);
+    private final StatCard products = new StatCard("Products", "inventory", Theme.Tint.VIOLET);
+    private final StatCard lowStock = new StatCard("Low / out of stock", "warning", Theme.Tint.YELLOW);
+    private final StatCard customers = new StatCard("Customers", "customers", Theme.Tint.VIOLET);
+    private final StatCard receivable = new StatCard("Customers owe you", "ledgers", Theme.Tint.RED);
+    private final StatCard payable = new StatCard("You owe suppliers", "ledgers", Theme.Tint.ORANGE);
 
-    private final ColumnChart salesChart = new ColumnChart("No sales in this period yet");
-    private final ColumnChart profitChart = new ColumnChart("No profit or expenses in this period yet");
+    private final LineChart salesChart = new LineChart("No sales in this period yet");
+    private final LineChart profitChart = new LineChart("No profit or expenses in this period yet");
     private final BarList topProducts = new BarList("No products sold in this period");
     private final BarList categories = new BarList("No sales in this period");
     private final StockStatusBar stockBar = new StockStatusBar();
@@ -166,9 +166,9 @@ public final class DashboardPage extends Page {
         salesTitle.setText("Sales (" + by + ")  •  " + Money.format(o.periodSales()));
         profitTitle.setText("Profit vs expenses (" + by + ")");
         salesChart.setData(d.salesTrend(from, to, g).stream()
-                .map(p -> new ColumnChart.Point(p.label(), p.value(), 0)).toList(), "Net sales", null);
+                .map(p -> new LineChart.Point(p.label(), p.value(), 0)).toList(), "Net sales", null);
         profitChart.setData(d.profitVsExpenses(from, to, g).stream()
-                .map(p -> new ColumnChart.Point(p.label(), p.value(), p.value2())).toList(), "Gross profit", "Expenses");
+                .map(p -> new LineChart.Point(p.label(), p.value(), p.value2())).toList(), "Gross profit", "Expenses");
         topProducts.setItems(d.topProducts(from, to, 8).stream()
                 .map(p -> new BarList.Item(p.label(), p.value(), "Sold: " + Qty.format(p.value2()))).toList());
         categories.setItems(d.salesByCategory(from, to, 8).stream()

@@ -65,9 +65,9 @@ public final class BarList extends JComponent {
         g2.setFont(Theme.font(12));
         FontMetrics fm = g2.getFontMetrics();
         int labelW = Math.min(170, Math.max(90, w * 34 / 100));
-        int valueW = 74;
+        int valueW = 84;
         int barX = labelW + 8;
-        int barMax = Math.max(20, w - barX - valueW - 6);
+        int barMax = Math.max(20, w - barX - valueW - 10);
         int y = 6;
         for (Item it : items) {
             String label = it.label();
@@ -80,12 +80,15 @@ public final class BarList extends JComponent {
             g2.setColor(Theme.TEXT_2);
             g2.drawString(label, 0, y + 18);
             int bw = (int) Math.max(2, barMax * (double) it.value() / Math.max(1, max));
+            g2.setColor(Theme.NEUTRAL_SOFT);
+            g2.fill(new RoundRectangle2D.Double(barX, y + 8, barMax, 12, 12, 12));
             g2.setColor(Theme.SERIES_1);
-            g2.fill(new RoundRectangle2D.Double(barX, y + 7, bw, 14, 4, 4));
-            g2.fillRect(barX, y + 7, Math.min(3, bw), 14);
+            g2.fill(new RoundRectangle2D.Double(barX, y + 8, bw, 12, 12, 12));
             g2.setColor(Theme.TEXT);
-            String v = ColumnChart.compact(it.value());
-            g2.drawString(v, barX + bw + 6, y + 18);
+            g2.setFont(Theme.bold(12));
+            String v = Money.symbol() + LineChart.compact(it.value());
+            g2.drawString(v, w - g2.getFontMetrics().stringWidth(v), y + 18);
+            g2.setFont(Theme.font(12));
             y += ROW;
         }
         g2.dispose();

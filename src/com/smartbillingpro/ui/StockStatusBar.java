@@ -12,7 +12,7 @@ public final class StockStatusBar extends JComponent {
 
     private long[] counts = new long[3];
     private static final String[] LABELS = {"In stock", "Low stock", "Out of stock"};
-    private static final Color[] COLORS = {Theme.GOOD, Theme.WARN_FILL, Theme.BAD};
+    private static final Color[] COLORS = {Theme.GOOD_FILL, Theme.WARN_FILL, Theme.BAD};
 
     public StockStatusBar() {
         setPreferredSize(new Dimension(300, 64));
@@ -32,7 +32,7 @@ public final class StockStatusBar extends JComponent {
         int w = getWidth();
         if (total == 0) {
             g2.setColor(Theme.GRID);
-            g2.fillRoundRect(0, 4, w, 14, 8, 8);
+            g2.fillRoundRect(0, 4, w, 14, 14, 14);
         } else {
             int x = 0;
             for (int i = 0; i < 3; i++) {
@@ -45,7 +45,7 @@ public final class StockStatusBar extends JComponent {
                     seg = w - x;
                 }
                 g2.setColor(COLORS[i]);
-                g2.fillRoundRect(x, 4, Math.max(1, seg - 2), 14, 6, 6);
+                g2.fillRoundRect(x, 4, Math.max(1, seg - 3), 14, 14, 14);
                 x += seg;
             }
         }
