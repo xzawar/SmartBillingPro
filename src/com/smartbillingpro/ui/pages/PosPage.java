@@ -118,6 +118,16 @@ public final class PosPage extends Page {
     private JPanel receivedRow;
     private JPanel changeRow;
     private int methodCount;
+    /** Short window: the bill hides extras (quick cash, subtotal lines) so the items stay visible. */
+    private boolean compactBill;
+    private final JLabel totalLabel = new JLabel("Total");
+    private Card totalCard;
+    private JPanel secondaryRow;
+    private final JPanel headTools = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
+    private final JButton headHold = Ui.icon("pause", "Hold this bill (F8)");
+    private final JButton headHeld = Ui.icon("clock", "Held bills (F9)");
+    private final JButton headClear = Ui.icon("trash", "Clear this bill");
+    private static final int MIN_CART_HEIGHT = 150;
     private final JLabel changeLabel = new JLabel(" ");
     private final JButton completeButton = Ui.success("Complete sale", "check");
     private final JButton holdButton = Ui.ghost("Hold bill", "pause");
@@ -405,7 +415,19 @@ public final class PosPage extends Page {
         JPanel head = new JPanel(new BorderLayout(8, 0));
         head.setOpaque(false);
         head.add(title, BorderLayout.WEST);
-        head.add(itemsLabel, BorderLayout.EAST);
+        headHold.addActionListener(e -> hold());
+        headHeld.addActionListener(e -> recall());
+        headClear.addActionListener(e -> clearCart(true));
+        headTools.setOpaque(false);
+        headTools.add(headHold);
+        headTools.add(headHeld);
+        headTools.add(headClear);
+        headTools.setVisible(false);
+        JPanel headRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        headRight.setOpaque(false);
+        headRight.add(itemsLabel);
+        headRight.add(headTools);
+        head.add(headRight, BorderLayout.EAST);
         customerButton.setHorizontalAlignment(SwingConstants.LEFT);
         customerButton.setIcon(Icons.get("user", 16, Theme.TEXT_2));
         customerButton.setIconTextGap(8);
@@ -423,13 +445,14 @@ public final class PosPage extends Page {
         cust.setOpaque(false);
         cust.add(customerButton, BorderLayout.CENTER);
         cust.add(Ui.flowRight(4, customerBalance, clearCustomer), BorderLayout.EAST);
-        card.add(Ui.vbox(10, head, cust), BorderLayout.NORTH);
+        JPanel north = Ui.vbox(10, head, cust);
+        card.add(north, BorderLayout.NORTH);
 
         // items
         card.add(cartList, BorderLayout.CENTER);
 
         // totals + payment
-        JPanel south = new JPanel();
+        JPanel south = new com.smartbillingpro.ui.ScrollablePanel(null);
         south.setOpaque(false);
         south.setLayout(new BoxLayout(south, BoxLayout.Y_AXIS));
 
@@ -478,7 +501,8 @@ public final class PosPage extends Page {
         totalPanel.setOutlined(false);
         totalPanel.setBackground(Theme.SURFACE_ALT);
         totalPanel.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
-        JLabel tl = new JLabel("Total");
+        JLabel tl = totalLabel;
+        totalCard = totalPanel;
         tl.setFont(Theme.bold(16));
         tl.setForeground(Theme.TEXT);
         totalValue.setFont(Theme.heavy(30));
@@ -487,7 +511,7 @@ public final class PosPage extends Page {
         totalPanel.add(totalValue, BorderLayout.EAST);
         add(south, totalPanel, 8);
 
-        methods.setLayout(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        methods.setLayout(new com.smartbillingpro.ui.WrapLayout(FlowLayout.LEFT, 6, 4));
         methods.onChange(m -> {
             refreshPaymentMode();
             refreshChange();
@@ -498,6 +522,12 @@ public final class PosPage extends Page {
         received.setToolTipText("Leave empty when the customer pays the exact amount (F10)");
         Ui.onChange(received, this::refreshChange);
         received.addActionListener(e -> completeSale());
+        received.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusGained(java.awt.event.FocusEvent e) {
+                received.scrollRectToVisible(new java.awt.Rectangle(0, 0, received.getWidth(), received.getHeight() + 60));
+            }
+        });
         JPanel recv = new JPanel(new BorderLayout(10, 0));
         receivedRow = recv;
         recv.setOpaque(false);
@@ -519,7 +549,11 @@ public final class PosPage extends Page {
         JPanel completeRow = new JPanel(new BorderLayout());
         completeRow.setOpaque(false);
         completeRow.add(completeButton, BorderLayout.CENTER);
-        add(south, completeRow, 8);
+        // the main button and hold / clear are pinned below the scrolling part, always visible
+        JPanel actions = new JPanel();
+        actions.setOpaque(false);
+        actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS));
+        add(actions, completeRow, 0);
 
         holdButton.setToolTipText("Put this bill aside and serve someone else (F8)");
         heldButton.setToolTipText("Bills you put aside (F9)");
@@ -532,8 +566,39 @@ public final class PosPage extends Page {
         secondary.add(holdButton);
         secondary.add(heldButton);
         secondary.add(clearButton);
-        add(south, secondary, 6);
-        card.add(south, BorderLayout.SOUTH);
+        secondaryRow = secondary;
+        add(actions, secondary, 6);
+        // Never let payment squeeze the items out: on short screens the payment part scrolls instead.
+        JScrollPane southScroll = new JScrollPane(south) {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension d = south.getPreferredSize();
+                if (card.getHeight() <= 0) {
+                    return d;
+                }
+                java.awt.Insets in = card.getInsets();
+                int avail = card.getHeight() - in.top - in.bottom - north.getPreferredSize().height
+                        - actions.getPreferredSize().height - 24 - MIN_CART_HEIGHT;
+                return new Dimension(d.width, Math.min(d.height, Math.max(110, avail)));
+            }
+        };
+        southScroll.setBorder(BorderFactory.createEmptyBorder());
+        southScroll.setOpaque(false);
+        southScroll.getViewport().setOpaque(false);
+        southScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        southScroll.getVerticalScrollBar().setUnitIncrement(20);
+        JPanel bottom = new JPanel(new BorderLayout(0, 8));
+        bottom.setOpaque(false);
+        bottom.add(southScroll, BorderLayout.CENTER);
+        bottom.add(actions, BorderLayout.SOUTH);
+        card.add(bottom, BorderLayout.SOUTH);
+        card.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                setCompactBill(card.getHeight() < 720);
+                card.revalidate();
+            }
+        });
         return card;
     }
 
@@ -842,6 +907,20 @@ public final class PosPage extends Page {
         refreshTotals();
     }
 
+    private void setCompactBill(boolean compact) {
+        if (compact == compactBill) {
+            return;
+        }
+        compactBill = compact;
+        totalValue.setFont(Theme.heavy(compact ? 24 : 30));
+        totalLabel.setFont(Theme.bold(compact ? 14 : 16));
+        totalCard.setBorder(BorderFactory.createEmptyBorder(compact ? 5 : 8, 14, compact ? 5 : 8, 14));
+        // short screens: hold / held / clear move up next to "Current bill"
+        secondaryRow.setVisible(!compact);
+        headTools.setVisible(compact);
+        refreshTotals();
+    }
+
     private void refreshTotals() {
         Cart.Totals t = cart.totals();
         boolean hasDiscount = discountRow.isVisible();
@@ -850,8 +929,10 @@ public final class PosPage extends Page {
         discountValue.setText(t.totalDiscount() > 0 ? "−" + Money.format(t.totalDiscount()) : Money.format(0));
         taxValue.setText(Money.format(t.tax()));
         totalValue.setText(Money.format(t.grandTotal()));
-        subtotalRow.setVisible(!cart.isEmpty() && (hasDiscount || tax || t.itemDiscount() > 0));
-        taxRow.setVisible(tax);
+        subtotalRow.setVisible(!compactBill && !cart.isEmpty() && (hasDiscount || tax || t.itemDiscount() > 0));
+        taxRow.setVisible(tax && !compactBill);
+        totalLabel.setText(compactBill && tax && t.tax() > 0 ? "<html>Total<br><span style='font-size:9px;font-weight:normal'>incl. "
+                + Money.format(t.tax()) + " tax</span></html>" : "Total");
         long units = cart.lines().stream().filter(l -> !l.item().fractional()).mapToLong(Cart.Line::qty).sum();
         int lines = cart.lines().size();
         itemsLabel.setText(lines == 0 ? " " : units > 0 && units / Qty.ONE != lines
@@ -864,6 +945,8 @@ public final class PosPage extends Page {
         changeRow.setVisible(paying);
         holdButton.setEnabled(!cart.isEmpty());
         clearButton.setEnabled(!cart.isEmpty());
+        headHold.setEnabled(!cart.isEmpty());
+        headClear.setEnabled(!cart.isEmpty());
         refreshQuickCash(t.grandTotal());
         refreshChange();
     }
@@ -883,7 +966,7 @@ public final class PosPage extends Page {
     /** "Exact" plus the next round amounts a customer is likely to hand over. */
     private void refreshQuickCash(long total) {
         quickCash.removeAll();
-        boolean show = !cart.isEmpty() && cashSelected() && total > 0;
+        boolean show = !compactBill && !cart.isEmpty() && cashSelected() && total > 0;
         quickCash.setVisible(show);
         if (!show) {
             return;
@@ -951,14 +1034,16 @@ public final class PosPage extends Page {
             return;
         } else if (cart.customer() == null) {
             changeLabel.setForeground(Theme.BAD);
-            changeLabel.setText("<html><div style='text-align:right'>" + Money.format(total - paid)
+            changeLabel.setText(compactBill ? Money.format(total - paid) + " short – choose a customer for credit"
+                    : "<html><div style='text-align:right'>" + Money.format(total - paid)
                     + " short – choose the customer to put it on their account</div></html>");
         } else {
             changeLabel.setForeground(Theme.WARN);
-            changeLabel.setText("<html><div style='text-align:right'>" + Money.format(total - paid) + " will be added to "
+            changeLabel.setText(compactBill ? Money.format(total - paid) + " added to their account"
+                    : "<html><div style='text-align:right'>" + Money.format(total - paid) + " will be added to "
                     + cart.customer().name().replace("<", "&lt;") + "'s account</div></html>");
         }
-        changeLabel.setFont(Theme.bold(16));
+        changeLabel.setFont(Theme.bold(compactBill ? 14 : 16));
     }
 
     private void completeSale() {
@@ -1096,6 +1181,8 @@ public final class PosPage extends Page {
         long n = ctx.sales().heldCount();
         heldButton.setText(n == 0 ? "Held bills" : "Held bills (" + n + ")");
         heldButton.setVisible(n > 0);
+        headHeld.setVisible(n > 0);
+        headHeld.setToolTipText(n == 0 ? "Held bills (F9)" : "Held bills: " + n + " (F9)");
     }
 
     private void clearCart(boolean ask) {

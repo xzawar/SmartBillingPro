@@ -40,6 +40,14 @@ public abstract class Page extends JPanel {
         add(body, BorderLayout.CENTER);
     }
 
+    /** Short windows: drop the subtitle and tighten the padding so the content gets the room. */
+    public void setCompactHeader(boolean compact) {
+        subtitle.setVisible(!compact);
+        setBorder(BorderFactory.createEmptyBorder(compact ? 10 : 18, 22, compact ? 10 : 18, 22));
+        ((BorderLayout) getLayout()).setVgap(compact ? 8 : 14);
+        revalidate();
+    }
+
     protected void setSubtitle(String text) {
         subtitle.setText(text);
     }
