@@ -573,6 +573,12 @@ public final class SettingsPage extends Page {
 
     // ------------------------------------------------------------ security & data
 
+    private JButton termsButton() {
+        JButton terms = Ui.secondary("Terms of use", "file");
+        terms.addActionListener(e -> new com.smartbillingpro.ui.dialogs.TermsDialog(this).open(640));
+        return terms;
+    }
+
     private JComponent buildSecurity() {
         JPasswordField pin1 = new JPasswordField(10);
         JPasswordField pin2 = new JPasswordField(10);
@@ -612,8 +618,9 @@ public final class SettingsPage extends Page {
                         + "</b><br>No internet connection or online account is used.</html>"),
                 Ui.flowLeft(6, openData, importOld),
                 Ui.heading("About"),
-                Ui.muted(AppPaths.APP_NAME + " " + AppPaths.VERSION + " (offline edition) • Java "
-                        + System.getProperty("java.version")));
+                Ui.muted(AppPaths.APP_NAME + " " + AppPaths.VERSION + " (offline edition) • Developed by KeyKraft • Java "
+                        + System.getProperty("java.version")),
+                Ui.flowLeft(6, termsButton()));
         return form(c, null);
     }
 

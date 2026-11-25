@@ -12,7 +12,8 @@ import java.util.Comparator;
  */
 public final class TestRunner {
 
-    private static final Class<?>[] SUITES = {CoreTests.class, BackupTests.class, OutputTests.class};
+    private static final Class<?>[] SUITES = {CoreTests.class, BackupTests.class, OutputTests.class,
+        com.smartbillingpro.app.DeviceLockTests.class};
 
     public static void main(String[] args) {
         System.setProperty("java.awt.headless", System.getProperty("java.awt.headless", "true"));

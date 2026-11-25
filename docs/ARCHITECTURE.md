@@ -122,6 +122,27 @@ two dashboard references). Tokens live only in `ui/Theme.java`:
   customer / supplier totals, payment split, expenses by category) that a
   test checks against the recorded transactions.
 
+### Installer and computer lock
+
+`make-installer.bat` runs `packaging/make-installer.ps1`: tests → compile →
+jar → `jpackage` app image with its own Java runtime → Inno Setup
+(`packaging/installer/SmartBillingPro.iss`) → `dist/SmartBillingPro-Setup-<version>.exe`.
+The installer shows `resources/legal/terms.txt` (must be accepted), installs
+for all users, adds shortcuts and an uninstaller, and then runs
+`SmartBillingPro.exe --bind-device <token>`.
+
+`app/DeviceLock` writes `device.lic` into the installation folder: SHA-256
+hashes of the Windows machine GUID and hardware UUID plus an HMAC. Every
+build has its own random token; only its SHA-256 is inside the app, so the
+installed files alone cannot register another computer. At start-up the app
+reads the IDs again and refuses to run when the files were copied to another
+computer, the registration was edited, or it is missing (`--check-device`
+reports the state). The hardware ID is only compared when it could be read
+both times, so a limited Windows account never locks out the real laptop.
+This stops copying the installed app; like any purely offline lock it
+cannot stop someone who runs the installer again on another computer or
+who reverse-engineers the program — the terms of use cover that.
+
 ## 7. Testing
 
 `test/` holds a dependency-free runner (`run-tests.bat` / `./run-tests.sh`)
@@ -142,9 +163,10 @@ no network at all.
 
 ## 8. Known limitations
 
-* The Windows `.exe` must be built on Windows (`build-exe.bat`, or the
-  GitHub Actions workflow) — `jpackage` only targets the OS it runs on. An
-  installer additionally needs the WiX Toolset 3; the portable zip does not.
+* The Windows installer must be built on Windows (`make-installer.bat`, or
+  the GitHub Actions workflow) — `jpackage` only targets the OS it runs on —
+  and needs Inno Setup 6. It is not code-signed, so Windows SmartScreen asks
+  for confirmation on first run.
 * Physical thermal printers and scanners could not be tested here; the
   printing paths use standard Java printing / raw ESC/POS and were verified
   through rendering and byte output. Use *Print test receipt* on site.

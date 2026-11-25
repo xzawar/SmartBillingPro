@@ -226,14 +226,37 @@ public final class MainFrame extends JFrame {
             sidebar.add(Box.createVerticalStrut(2));
         }
         sidebar.add(Box.createVerticalGlue());
+        sidebar.add(buildCredits());
+        sidebar.setPreferredSize(new Dimension(232, 0));
+        return sidebar;
+    }
+
+    /** Bottom of the sidebar: the KeyKraft logo, "Developed by KeyKraft" and the version. */
+    private JPanel buildCredits() {
+        JPanel credits = new JPanel();
+        credits.setLayout(new BoxLayout(credits, BoxLayout.Y_AXIS));
+        credits.setOpaque(false);
+        credits.setAlignmentX(Component.LEFT_ALIGNMENT);
+        credits.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
+        JLabel logo = new JLabel(new KeyKraftLogo(30));
+        logo.setToolTipText("Smart Billing Pro is developed by KeyKraft");
+        logo.getAccessibleContext().setAccessibleName("KeyKraft logo");
+        JLabel by = new JLabel("Developed by KeyKraft");
+        by.setFont(Theme.bold(12));
+        by.setForeground(Theme.TEXT_2);
         JLabel version = new JLabel("Offline • v" + AppPaths.VERSION);
         version.setFont(Theme.font(12));
         version.setForeground(Theme.MUTED);
-        version.setAlignmentX(Component.LEFT_ALIGNMENT);
-        version.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
-        sidebar.add(version);
-        sidebar.setPreferredSize(new Dimension(232, 0));
-        return sidebar;
+        for (JComponent c : new JComponent[] {logo, by, version}) {
+            c.setAlignmentX(Component.LEFT_ALIGNMENT);
+        }
+        credits.add(logo);
+        credits.add(Box.createVerticalStrut(8));
+        credits.add(by);
+        credits.add(Box.createVerticalStrut(2));
+        credits.add(version);
+        credits.putClientProperty("credits", new JComponent[] {by, version});
+        return credits;
     }
 
     private void setCompact(boolean c) {
@@ -248,6 +271,12 @@ public final class MainFrame extends JFrame {
             }
             if (comp instanceof JLabel l) {
                 l.setVisible(!c);
+            }
+            if (comp instanceof JPanel p && p.getClientProperty("credits") instanceof JComponent[] texts) {
+                for (JComponent t : texts) {
+                    t.setVisible(!c);
+                }
+                p.setBorder(BorderFactory.createEmptyBorder(0, c ? 8 : 12, 0, 0));
             }
         }
         navButtons.values().forEach(b -> b.setCompact(c));
