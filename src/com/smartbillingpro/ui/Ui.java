@@ -242,6 +242,25 @@ public final class Ui {
         }
     }
 
+    /** Like {@link #moneyValue} but allows a leading minus sign (e.g. an advance paid). Empty means 0. */
+    public static long signedMoneyValue(JTextField f, String name) {
+        String t = f.getText().trim();
+        if (t.isEmpty()) {
+            setError(f, false);
+            return 0;
+        }
+        boolean negative = t.startsWith("-");
+        try {
+            long v = Money.parse(negative ? t.substring(1).trim() : t);
+            setError(f, false);
+            return negative ? -v : v;
+        } catch (IllegalArgumentException e) {
+            setError(f, true);
+            f.requestFocusInWindow();
+            throw new AppException(capitalize(name) + ": " + e.getMessage());
+        }
+    }
+
     public static long qtyValue(JTextField f, String name, boolean required) {
         String t = f.getText().trim();
         if (t.isEmpty()) {
@@ -314,6 +333,25 @@ public final class Ui {
         }
         p.add(holder, BorderLayout.CENTER);
         return p;
+    }
+
+    /** A toolbar row: items on the left at their natural size, optional items on the right. */
+    public static JPanel toolbar(Component[] left, Component... right) {
+        JPanel bar = new JPanel(new BorderLayout(12, 0));
+        bar.setOpaque(false);
+        JPanel l = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        l.setOpaque(false);
+        for (int i = 0; i < left.length; i++) {
+            if (i > 0) {
+                l.add(hgap(12));
+            }
+            l.add(left[i]);
+        }
+        bar.add(l, BorderLayout.WEST);
+        if (right.length > 0) {
+            bar.add(flowRight(8, right), BorderLayout.EAST);
+        }
+        return bar;
     }
 
     public static JPanel flowLeft(int gap, Component... parts) {

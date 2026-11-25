@@ -27,7 +27,7 @@ final class PageStatus {
 
     static DataTable.Status purchase(Purchase p) {
         if (p.reversed()) {
-            return new DataTable.Status("Reversed", Ui.Tone.NEUTRAL);
+            return new DataTable.Status("Cancelled", Ui.Tone.NEUTRAL);
         }
         if (p.balanceDue() == 0) {
             return new DataTable.Status("Paid", Ui.Tone.GOOD);

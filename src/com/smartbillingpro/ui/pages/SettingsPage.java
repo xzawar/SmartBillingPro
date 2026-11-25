@@ -106,7 +106,7 @@ public final class SettingsPage extends Page {
         tabs.addTab("Store", buildStore());
         tabs.addTab("Sales & receipts", buildReceipts());
         tabs.addTab("Printer", buildPrinter());
-        tabs.addTab("Payment methods & units", buildLists());
+        tabs.addTab("Payments & units", buildLists());
         tabs.addTab("Backup & restore", buildBackup());
         tabs.addTab("Security & data", buildSecurity());
         tabs.addChangeListener(e -> refresh());
@@ -120,26 +120,36 @@ public final class SettingsPage extends Page {
         tabs.setSelectedIndex(4);
     }
 
+    public void showPrinterTab() {
+        tabs.setSelectedIndex(2);
+    }
+
+    /** A settings form that scrolls, with its Save button always visible at the bottom. */
     private JComponent form(JComponent content, Runnable save) {
-        JPanel p = new JPanel(new BorderLayout(0, 14));
+        Card c = new Card(new BorderLayout());
+        c.setBorder(BorderFactory.createEmptyBorder(18, 20, 18, 20));
+        c.add(content, BorderLayout.NORTH);
+        JScrollPane sp = new JScrollPane(c);
+        sp.setBorder(BorderFactory.createEmptyBorder());
+        sp.getViewport().setBackground(Theme.BG);
+        sp.getVerticalScrollBar().setUnitIncrement(20);
+        JPanel p = new JPanel(new BorderLayout(0, 10));
         p.setOpaque(false);
-        p.add(content, BorderLayout.NORTH);
+        p.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
+        p.add(sp, BorderLayout.CENTER);
         if (save != null) {
             JButton b = Ui.primary("Save changes", "check");
             b.addActionListener(e -> safely(() -> {
                 save.run();
                 Toast.ok(this, "Settings saved.");
             }));
-            p.add(Ui.flowLeft(0, b), BorderLayout.CENTER);
+            JPanel footer = new JPanel(new BorderLayout());
+            footer.setOpaque(false);
+            footer.add(Ui.muted("Changes are used straight away after saving."), BorderLayout.WEST);
+            footer.add(b, BorderLayout.EAST);
+            p.add(footer, BorderLayout.SOUTH);
         }
-        Card c = new Card(new BorderLayout());
-        c.setBorder(BorderFactory.createEmptyBorder(18, 20, 18, 20));
-        c.add(p, BorderLayout.NORTH);
-        JScrollPane sp = new JScrollPane(c);
-        sp.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
-        sp.getViewport().setBackground(Theme.BG);
-        sp.getVerticalScrollBar().setUnitIncrement(20);
-        return sp;
+        return p;
     }
 
     private static JComponent area(JTextArea a) {
@@ -153,14 +163,16 @@ public final class SettingsPage extends Page {
     // ------------------------------------------------------------ store
 
     private JComponent buildStore() {
+        com.smartbillingpro.ui.Collapsible more = new com.smartbillingpro.ui.Collapsible("Show more options",
+                Ui.vbox(12, Ui.grid(2, 14, 10, Ui.row("Email", storeEmail), Ui.row("Tax registration no.", storeTaxId)),
+                        Ui.grid(3, 14, 10, Ui.row("Currency symbol", currencySymbol, "Shown before amounts, e.g. Rs"),
+                                Ui.row("Currency code", currencyCode, "e.g. PKR"),
+                                Ui.row("Date format", dateFormat, "How dates appear on screen and receipts")),
+                        Ui.grid(3, 14, 10, Ui.row("Warn when stock falls to", lowStock,
+                                "Used for new products; change it per product too"))));
         JComponent c = Ui.vbox(12, Ui.heading("Shop details"), Ui.muted("Printed on every receipt and report."),
-                Ui.grid(2, 14, 10, Ui.row("Shop name *", storeName), Ui.row("Phone", storePhone),
-                        Ui.row("Address", storeAddress), Ui.row("Email", storeEmail), Ui.row("Tax registration no.", storeTaxId)),
-                Ui.heading("Money & dates"),
-                Ui.grid(3, 14, 10, Ui.row("Currency symbol", currencySymbol, "Shown before amounts, e.g. Rs"),
-                        Ui.row("Currency code", currencyCode, "e.g. PKR"), Ui.row("Date format", dateFormat, "How dates appear on screen and receipts")),
-                Ui.heading("Inventory"),
-                Ui.grid(3, 14, 10, Ui.row("Default low-stock alert", lowStock, "Used for new products")));
+                Ui.grid(2, 14, 10, Ui.row("Shop name", storeName), Ui.row("Phone", storePhone)),
+                Ui.row("Address", storeAddress), more);
         return form(c, () -> {
             Map<String, String> m = new LinkedHashMap<>();
             m.put(Settings.STORE_NAME, storeName.getText());
@@ -180,15 +192,19 @@ public final class SettingsPage extends Page {
     // ------------------------------------------------------------ receipts
 
     private JComponent buildReceipts() {
-        JComponent c = Ui.vbox(12, Ui.heading("Tax"),
-                taxEnabled, Ui.grid(3, 14, 10, Ui.row("Tax rate (%)", taxPercent), Ui.row("Tax name on receipt", taxLabel)),
-                Ui.heading("Receipts"),
-                Ui.grid(3, 14, 10, Ui.row("Receipt number prefix", prefix, "e.g. INV → INV-000123"),
-                        Ui.row("Default payment method", defaultMethod), Ui.row("After completing a sale", afterSale)),
-                Ui.grid(2, 14, 10, Ui.row("Header text (optional)", area(header)), Ui.row("Footer text", area(footer))),
-                Ui.heading("PDF copies"), autoPdf,
-                Ui.grid(2, 14, 10, Ui.row("PDF folder", pdfDir, "Leave empty for the default folder"),
-                        Ui.row("PDF size", pdfSize)));
+        com.smartbillingpro.ui.Collapsible more = new com.smartbillingpro.ui.Collapsible("Show more receipt options",
+                Ui.vbox(12, Ui.grid(3, 14, 10, Ui.row("Receipt number starts with", prefix, "e.g. INV \u2192 INV-000123"),
+                                Ui.row("Usual way of paying", defaultMethod, "Chosen first on the Sales screen")),
+                        Ui.row("Extra text at the top (optional)", area(header)),
+                        Ui.heading("PDF copies"), autoPdf,
+                        Ui.grid(2, 14, 10, Ui.row("PDF folder", pdfDir, "Leave empty for the default folder"),
+                                Ui.row("PDF size", pdfSize))));
+        JComponent c = Ui.vbox(12, Ui.heading("After each sale"),
+                Ui.grid(2, 14, 10, Ui.row("Then", afterSale, "Print straight away, show a preview, or do nothing"),
+                        Ui.row("Thank-you message at the bottom", area(footer))),
+                Ui.heading("Tax"), taxEnabled,
+                Ui.grid(3, 14, 10, Ui.row("Tax rate (%)", taxPercent), Ui.row("Name on the receipt", taxLabel, "e.g. GST")),
+                more);
         return form(c, () -> {
             Map<String, String> m = new LinkedHashMap<>();
             m.put(Settings.TAX_ENABLED, String.valueOf(taxEnabled.isSelected()));
@@ -235,16 +251,18 @@ public final class SettingsPage extends Page {
         }));
         JButton refreshPrinters = Ui.ghost("Refresh list", "refresh");
         refreshPrinters.addActionListener(e -> loadPrinters());
+        com.smartbillingpro.ui.Collapsible advanced = new com.smartbillingpro.ui.Collapsible("Show advanced printer settings",
+                Ui.vbox(12, Ui.grid(2, 14, 10, Ui.row("How to print", mode, "Windows driver works for almost every printer"),
+                                Ui.row("Paper width (mm)", paperMm)),
+                        Ui.grid(3, 14, 10, Ui.row("Printable width (mm)", printableMm, "58 mm paper \u2192 48, 80 mm \u2192 72"),
+                                Ui.row("Text size (pt)", fontPt, "Driver mode, default 8"),
+                                Ui.row("Characters per line", chars, "ESC/POS: 32 for 58 mm, 48 for 80 mm")),
+                        cut, drawer));
         JComponent c = Ui.vbox(12, Ui.heading("Receipt printer"),
-                Ui.muted("<html>Install the printer's Windows driver first (USB thermal printers usually appear as e.g. "
-                        + "\"POS-80\" or \"XP-58\"). Choose it here and print a test receipt.</html>"),
-                Ui.grid(2, 14, 10, Ui.row("Printer", printer), Ui.row("How to print", mode)),
-                Ui.flowLeft(6, refreshPrinters),
-                Ui.grid(3, 14, 10, Ui.row("Paper roll", paper), Ui.row("Paper width (mm)", paperMm),
-                        Ui.row("Printable width (mm)", printableMm, "58 mm paper → 48, 80 mm → 72")),
-                Ui.grid(3, 14, 10, Ui.row("Text size (pt)", fontPt, "Driver mode, default 8"),
-                        Ui.row("Characters per line", chars, "ESC/POS mode: 32 for 58 mm, 48 for 80 mm")),
-                cut, drawer, Ui.flowLeft(0, test));
+                Ui.muted("<html>Install the printer's Windows driver first (USB receipt printers usually show up as e.g. "
+                        + "\"POS-80\" or \"XP-58\"). Choose it here, then print a test receipt.</html>"),
+                Ui.grid(2, 14, 10, Ui.row("Printer", printer), Ui.row("Paper roll", paper)),
+                Ui.flowLeft(8, test, refreshPrinters), advanced);
         return form(c, this::savePrinter);
     }
 
@@ -386,27 +404,39 @@ public final class SettingsPage extends Page {
     }
 
     private void addUnit() {
-        JTextField code = Ui.field("e.g. dz");
-        JTextField name = Ui.field("e.g. Dozen");
-        JComboBox<Dimension> dim = new JComboBox<>(Dimension.values());
-        JTextField factor = Ui.field("e.g. 12");
-        JLabel hint = Ui.muted("How many pieces / grams / ml / cm is one of this unit?");
-        int r = javax.swing.JOptionPane.showConfirmDialog(this, Ui.vbox(8, Ui.row("Code", code), Ui.row("Name", name),
-                Ui.row("Measures", dim), Ui.row("Equals", factor), hint), "Add unit",
-                javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE);
-        if (r != javax.swing.JOptionPane.OK_OPTION) {
-            return;
+        if (new UnitDialog().open(460)) {
+            Toast.ok(this, "Unit added.");
+            refresh();
         }
-        safely(() -> {
+    }
+
+    /** Add a unit of measurement, e.g. a dozen = 12 pieces. */
+    private final class UnitDialog extends com.smartbillingpro.ui.FormDialog {
+        private final JTextField code = Ui.field("e.g. dz");
+        private final JTextField name = Ui.field("e.g. Dozen");
+        private final JComboBox<Dimension> dim = new JComboBox<>(Dimension.values());
+        private final JTextField factor = Ui.field("e.g. 12");
+
+        UnitDialog() {
+            super(SettingsPage.this, "New unit", "Add unit");
+            setSubtitle("For example a dozen is 12 pieces, a pao is 250 grams.");
+            setBody(Ui.vbox(12, Ui.grid(2, 12, 0, Ui.row("Name", name), Ui.row("Short code", code)),
+                    Ui.grid(2, 12, 0, Ui.row("It measures", dim), Ui.row("One of it equals", factor,
+                            "pieces / grams / ml / cm"))));
+        }
+
+        @Override
+        protected boolean onSave() {
             BigDecimal f;
             try {
                 f = new BigDecimal(factor.getText().trim());
             } catch (NumberFormatException e) {
-                throw new com.smartbillingpro.db.AppException("\"Equals\" must be a number.");
+                factor.requestFocusInWindow();
+                throw new com.smartbillingpro.db.AppException("Please type how much one of it equals, e.g. 12.");
             }
             ctx.inventory().addUnit(code.getText(), name.getText(), (Dimension) dim.getSelectedItem(), f);
-            refresh();
-        });
+            return true;
+        }
     }
 
     // ------------------------------------------------------------ backup

@@ -121,7 +121,7 @@ public final class MainFrame extends JFrame {
         t.start();
         tick();
         updateBackupStatus();
-        show(SALES);
+        show(ctx.inventory().products(false).isEmpty() ? DASHBOARD : SALES);
     }
 
     public AppContext context() {
@@ -129,9 +129,11 @@ public final class MainFrame extends JFrame {
     }
 
     private void setStoreName(String name) {
-        String safe = name == null ? "" : name.replace("&", "&amp;").replace("<", "&lt;");
-        storeName.setText("<html><div style='width:150px'>" + safe + "</div></html>");
-        storeName.setToolTipText(name);
+        String n = name == null ? "" : name;
+        String safe = n.replace("&", "&amp;").replace("<", "&lt;");
+        storeName.setFont(Theme.bold(n.length() > 18 ? 13 : 15));
+        storeName.setText("<html><div style='width:140px'>" + safe + "</div></html>");
+        storeName.setToolTipText(n);
     }
 
     private void buildPages() {

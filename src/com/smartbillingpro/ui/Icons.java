@@ -238,6 +238,54 @@ public final class Icons {
             }
             case "chevron-down" -> g.draw(poly(6.5, 9.5, 12, 15, 17.5, 9.5));
             case "chevron-right" -> g.draw(poly(9.5, 6.5, 15, 12, 9.5, 17.5));
+            case "chevron-left" -> g.draw(poly(14.5, 6.5, 9, 12, 14.5, 17.5));
+            case "tag" -> {
+                g.draw(poly(3.5, 12.5, 12.5, 3.5, 20.5, 3.5, 20.5, 11.5, 11.5, 20.5, 3.5, 12.5));
+                g.fill(new Ellipse2D.Double(15, 7, 3, 3));
+            }
+            case "keyboard" -> {
+                g.draw(rr(2.5, 6, 19, 12, 2));
+                ln(g, 6, 10, 7, 10);
+                ln(g, 10, 10, 11, 10);
+                ln(g, 14, 10, 15, 10);
+                ln(g, 18, 10, 18, 10.5);
+                ln(g, 7, 14, 17, 14);
+            }
+            case "sparkle" -> {
+                g.draw(poly(12, 3, 13.8, 10.2, 21, 12, 13.8, 13.8, 12, 21, 10.2, 13.8, 3, 12, 10.2, 10.2, 12, 3));
+            }
+            case "store" -> {
+                g.draw(poly(3.5, 9, 5, 4, 19, 4, 20.5, 9));
+                ln(g, 3.5, 9, 20.5, 9);
+                g.draw(poly(5, 9, 5, 20, 19, 20, 19, 9));
+                g.draw(poly(10, 20, 10, 14, 14, 14, 14, 20));
+            }
+            case "drop" -> {
+                Path2D d = new Path2D.Double();
+                d.moveTo(12, 3);
+                d.curveTo(12, 3, 5.5, 10.5, 5.5, 14.5);
+                d.curveTo(5.5, 18.2, 8.4, 21, 12, 21);
+                d.curveTo(15.6, 21, 18.5, 18.2, 18.5, 14.5);
+                d.curveTo(18.5, 10.5, 12, 3, 12, 3);
+                g.draw(d);
+            }
+            case "ruler" -> {
+                g.draw(rr(2.5, 8, 19, 8, 1.5));
+                ln(g, 6.5, 8, 6.5, 11);
+                ln(g, 10.5, 8, 10.5, 12);
+                ln(g, 14.5, 8, 14.5, 11);
+                ln(g, 18.5, 8, 18.5, 12);
+            }
+            case "image" -> {
+                g.draw(rr(3, 4.5, 18, 15, 2));
+                g.draw(new Ellipse2D.Double(7, 8, 3.5, 3.5));
+                g.draw(poly(3.5, 17.5, 9.5, 12.5, 13.5, 16, 16, 13.5, 20.5, 18));
+            }
+            case "percent" -> {
+                ln(g, 18, 6, 6, 18);
+                g.draw(new Ellipse2D.Double(5, 5, 4, 4));
+                g.draw(new Ellipse2D.Double(15, 15, 4, 4));
+            }
             default -> g.draw(new Ellipse2D.Double(5, 5, 14, 14));
         }
     }

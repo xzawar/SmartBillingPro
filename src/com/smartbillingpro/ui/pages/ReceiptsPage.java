@@ -8,9 +8,11 @@ import com.smartbillingpro.print.ReceiptData;
 import com.smartbillingpro.ui.Card;
 import com.smartbillingpro.ui.DataTable;
 import com.smartbillingpro.ui.DateRangeBar;
+import com.smartbillingpro.ui.EmptyState;
 import com.smartbillingpro.ui.MainFrame;
 import com.smartbillingpro.ui.Msg;
 import com.smartbillingpro.ui.Page;
+import com.smartbillingpro.ui.RowList;
 import com.smartbillingpro.ui.Theme;
 import com.smartbillingpro.ui.Toast;
 import com.smartbillingpro.ui.Ui;
@@ -27,39 +29,46 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Dimension;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.util.List;
 
-/** Every receipt, searchable, with preview, reprint, PDF and returns. */
+/** Every past sale: find it, see the receipt, print it again or take items back. */
 public final class ReceiptsPage extends Page {
 
     private final JTextField search = Ui.search("Receipt no., customer or phone");
     private final DateRangeBar range = new DateRangeBar(DateRangeBar.Preset.LAST_7);
     private final JComboBox<Object> method = new JComboBox<>();
-    private final JComboBox<Object> status = new JComboBox<>(new Object[] {"Any status", SaleStatus.COMPLETED,
-        SaleStatus.PARTIALLY_RETURNED, SaleStatus.RETURNED});
-    private final DataTable<Sale> table = new DataTable<>();
+    private final JComboBox<Object> status = new JComboBox<>(new Object[] {"Any status", "Paid", "Not fully paid",
+        "Returned"});
+    private final RowList<Sale> list = new RowList<>(ReceiptsPage::row, 60);
     private final JPanel previewHolder = new JPanel(new BorderLayout());
     private final JLabel previewInfo = Ui.muted(" ");
+    private final CardLayout rightCards = new CardLayout();
+    private final JPanel right = new JPanel(rightCards);
+    private final CardLayout pageCards = new CardLayout();
+    private final JPanel holder = new JPanel(pageCards);
     private final JButton print = Ui.primary("Print", "print");
-    private final JButton pdf = Ui.secondary("Save PDF", "pdf");
-    private final JButton returns = Ui.secondary("Return items", "return");
+    private final JButton pdf = Ui.secondary("Save as PDF", "pdf");
+    private final JButton returns = Ui.secondary("Take items back", "return");
     private Sale current;
     private boolean loading;
 
     public ReceiptsPage(MainFrame frame) {
-        super(frame, "Receipts", "Find, reprint or return any past sale");
-        table.text("Receipt", Sale::receiptNo, 110).col("Date", DataTable.Kind.DATETIME, Sale::createdAt, 150)
-                .text("Customer", Sale::customerName, 150).text("Method", s -> s.paymentMethodName(), 100)
-                .money("Total", Sale::grandTotal).status("Status", PageStatus::sale);
-        table.setEmptyText("No receipts match these filters.");
-        table.onSelect(this::preview);
-        table.onOpen(s -> new ReceiptDialog(this, ctx, ctx.sales().find(s.id())).open(560));
+        super(frame, "Receipts", "Find any past sale, print it again or take items back");
+        list.onSelect(this::preview);
+        list.onOpen(s -> new ReceiptDialog(this, ctx, ctx.sales().find(s.id())).open(560), false);
+        list.setEmptyState(new EmptyState("receipts", "No receipts here",
+                "Nothing matches these filters. Try a longer period, like “This month” or “All time”.", true));
         range.onChange(this::refresh);
         method.addActionListener(e -> refresh());
         status.addActionListener(e -> refresh());
+        method.setToolTipText("Show one way of paying");
+        status.setToolTipText("Show paid, unpaid or returned sales");
         Ui.onChange(search, this::refresh);
-        search.setColumns(20);
 
         print.addActionListener(e -> {
             if (current != null) {
@@ -74,68 +83,100 @@ public final class ReceiptsPage extends Page {
                 new ReceiptDialog(this, ctx, current).open(560);
             }
         });
+        returns.setToolTipText("The customer brought something back");
         returns.addActionListener(e -> {
             if (current == null) {
                 return;
             }
             if (current.status() == SaleStatus.RETURNED) {
-                Msg.info(this, "Return", "Everything on this receipt has already been returned.");
+                Msg.info(this, "Already returned", "Everything on this receipt has already been taken back.");
                 return;
             }
             if (new ReturnDialog(this, ctx, current).open(700)) {
-                Toast.ok(this, "Return saved. Stock and balances updated.");
+                Toast.ok(this, "Return saved. Stock and balances are updated.");
                 refresh();
             }
         });
 
-        JPanel filters = Ui.vbox(8, Ui.flowLeft(8, search, method, status), range);
+        search.setColumns(20);
+        JPanel bar = Ui.toolbar(new java.awt.Component[] {search, range}, method, status);
 
-        JPanel left = new JPanel(new BorderLayout(0, 10));
-        left.setOpaque(false);
-        left.add(filters, BorderLayout.NORTH);
-        left.add(Ui.card(table, 4), BorderLayout.CENTER);
-        left.setMinimumSize(new Dimension(420, 200));
+        Card listCard = new Card(new BorderLayout());
+        listCard.setBorder(BorderFactory.createEmptyBorder(6, 2, 6, 2));
+        listCard.add(list, BorderLayout.CENTER);
 
-        previewHolder.setBackground(Theme.BG);
+        previewHolder.setBackground(Theme.SURFACE_ALT);
         JScrollPane ps = new JScrollPane(previewHolder);
         ps.setBorder(BorderFactory.createEmptyBorder());
         ps.getVerticalScrollBar().setUnitIncrement(20);
-        Card right = new Card(new BorderLayout(0, 10));
-        right.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-        right.add(previewInfo, BorderLayout.NORTH);
-        right.add(ps, BorderLayout.CENTER);
-        right.add(Ui.flowRight(6, returns, pdf, print), BorderLayout.SOUTH);
-        right.setPreferredSize(new Dimension(400, 200));
-        JPanel body = new JPanel(new BorderLayout(14, 0));
-        body.setOpaque(false);
-        body.add(left, BorderLayout.CENTER);
-        body.add(right, BorderLayout.EAST);
-        setBody(body);
+        JPanel previewPanel = new JPanel(new BorderLayout(0, 10));
+        previewPanel.setOpaque(false);
+        previewPanel.add(previewInfo, BorderLayout.NORTH);
+        previewPanel.add(ps, BorderLayout.CENTER);
+        previewPanel.add(Ui.flowRight(6, returns, pdf, print), BorderLayout.SOUTH);
+        Card previewCard = new Card(new BorderLayout());
+        previewCard.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        previewCard.add(previewPanel, BorderLayout.CENTER);
+        Card nothing = new Card(new BorderLayout());
+        nothing.add(new EmptyState("receipts", "Choose a receipt", "It will be shown here exactly as it prints.", true),
+                BorderLayout.CENTER);
+        right.setOpaque(false);
+        right.add(previewCard, "preview");
+        right.add(nothing, "none");
+
+        JPanel content = new JPanel(new BorderLayout(0, 10));
+        content.setOpaque(false);
+        content.add(bar, BorderLayout.NORTH);
+        JPanel split = CustomersPage.split(listCard, right);
+        content.add(split, BorderLayout.CENTER);
+
+        EmptyState none = new EmptyState("receipts", "No sales yet",
+                "Every sale you make shows up here, ready to print again or to take items back.")
+                .action("Go to Sales", "sales", () -> frame.show(MainFrame.SALES));
+        holder.setOpaque(false);
+        holder.add(content, "content");
+        holder.add(none, "empty");
+        setBody(holder);
         preview(null);
+    }
+
+    private static RowList.Row row(Sale s) {
+        DataTable.Status st = PageStatus.sale(s);
+        String who = s.customerName() == null || s.customerName().isBlank() ? "Walk-in customer" : s.customerName();
+        return RowList.Row.of(s.receiptNo() + "  •  " + who,
+                Dates.formatDateTime(s.createdAt()) + (s.paymentMethodName() == null ? "" : "  •  " + s.paymentMethodName()),
+                Money.format(s.grandTotal())).withIcon("receipts").withStatus(st.text(), st.tone())
+                .dimmed(s.status() == SaleStatus.RETURNED);
     }
 
     private void preview(Sale header) {
         current = header == null ? null : ctx.sales().find(header.id());
         previewHolder.removeAll();
-        boolean has = current != null;
-        print.setEnabled(has);
-        pdf.setEnabled(has);
-        returns.setEnabled(has && current.status() != SaleStatus.RETURNED);
-        if (!has) {
-            previewInfo.setText("Select a receipt to preview it.");
-        } else {
-            previewHolder.add(new ReceiptDialog.Preview(ReceiptData.of(current, ctx.settings().get()), ctx.settings().get()),
-                    BorderLayout.NORTH);
-            List<SaleReturn> rets = ctx.sales().returnsFor(current.id());
-            StringBuilder sb = new StringBuilder("<html>" + current.receiptNo() + " • " + Dates.formatDateTime(current.createdAt()));
-            for (SaleReturn r : rets) {
-                sb.append("<br>Return ").append(r.returnNo()).append(" on ").append(Dates.formatDate(r.createdAt()))
-                        .append(": ").append(Money.format(r.totalAmount())).append(" (").append(r.reason()).append(")");
-            }
-            previewInfo.setText(sb + "</html>");
+        if (current == null) {
+            rightCards.show(right, "none");
+            return;
         }
+        returns.setEnabled(current.status() != SaleStatus.RETURNED);
+        JPanel paper = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER, 0, 12));
+        paper.setOpaque(false);
+        paper.add(new ReceiptDialog.Preview(ReceiptData.of(current, ctx.settings().get()), ctx.settings().get()));
+        previewHolder.add(paper, BorderLayout.NORTH);
+        List<SaleReturn> rets = ctx.sales().returnsFor(current.id());
+        StringBuilder sb = new StringBuilder("<html><b>" + current.receiptNo() + "</b>  •  "
+                + Dates.formatDateTime(current.createdAt()));
+        for (SaleReturn r : rets) {
+            sb.append("<br>Taken back on ").append(Dates.formatDate(r.createdAt())).append(": ")
+                    .append(Money.format(r.totalAmount()))
+                    .append(r.reason() == null || r.reason().isBlank() ? "" : " (" + esc(r.reason()) + ")");
+        }
+        previewInfo.setText(sb + "</html>");
+        rightCards.show(right, "preview");
         previewHolder.revalidate();
         previewHolder.repaint();
+    }
+
+    private static String esc(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;");
     }
 
     @Override
@@ -147,29 +188,41 @@ public final class ReceiptsPage extends Page {
         try {
             Object sel = method.getSelectedItem();
             method.removeAllItems();
-            method.addItem("Any payment method");
-            for (PaymentMethod m : ctx.settings().paymentMethods(false)) {
+            method.addItem("Any way of paying");
+            List<PaymentMethod> methods = ctx.settings().paymentMethods(false);
+            for (PaymentMethod m : methods) {
                 method.addItem(m);
                 if (sel instanceof PaymentMethod pm && pm.id() == m.id()) {
                     sel = m;
                 }
             }
-            method.setSelectedItem(sel instanceof PaymentMethod ? sel : "Any payment method");
-            Object st = status.getSelectedItem();
+            method.setSelectedItem(sel instanceof PaymentMethod ? sel : "Any way of paying");
+            method.setVisible(methods.size() > 1);
+            int st = status.getSelectedIndex();
             List<Sale> rows = ctx.sales().list(Dates.startOf(range.from()), Dates.endExclusive(range.to()),
                     search.getText(), sel instanceof PaymentMethod pm ? pm.id() : null, null,
-                    st instanceof SaleStatus ss ? ss : null, 5000);
-            table.setRows(rows);
+                    st == 3 ? SaleStatus.RETURNED : null, 5000);
+            if (st == 1) {
+                rows = rows.stream().filter(s -> s.status() != SaleStatus.RETURNED && s.balanceDue() == 0).toList();
+            } else if (st == 2) {
+                rows = rows.stream().filter(s -> s.status() != SaleStatus.RETURNED && s.balanceDue() > 0).toList();
+            }
+            list.setItems(rows);
             long total = rows.stream().mapToLong(s -> s.grandTotal() - s.returnedTotal()).sum();
-            setSubtitle(rows.size() + " receipt(s)  •  net " + Money.format(total) + "  •  " + range.label());
-            if (current == null && !rows.isEmpty()) {
-                table.selectFirst();
-            } else if (current != null) {
+            boolean any = !rows.isEmpty() || ctx.sales().list(null, null, null, null, null, null, 1).size() > 0;
+            pageCards.show(holder, any ? "content" : "empty");
+            setSubtitle(rows.isEmpty() ? "Find any past sale, print it again or take items back"
+                    : rows.size() + (rows.size() == 1 ? " receipt" : " receipts") + "  •  " + Money.format(total)
+                    + " after returns  •  " + range.label().toLowerCase());
+            if (current != null) {
                 long id = current.id();
-                rows.stream().filter(s -> s.id() == id).findFirst().ifPresentOrElse(s -> {
-                    table.select(s);
-                    preview(s);
-                }, () -> preview(null));
+                rows.stream().filter(s -> s.id() == id).findFirst().ifPresentOrElse(list::select, () -> {
+                    list.selectFirst();
+                    preview(list.selected());
+                });
+            } else {
+                list.selectFirst();
+                preview(list.selected());
             }
         } finally {
             loading = false;
@@ -179,5 +232,14 @@ public final class ReceiptsPage extends Page {
     @Override
     public void focusDefault() {
         search.requestFocusInWindow();
+    }
+
+    /** Show every receipt matching a text (e.g. a customer's name), whatever the date. */
+    public void searchFor(String text) {
+        loading = true;
+        range.setPreset(DateRangeBar.Preset.ALL_TIME);
+        search.setText(text);
+        loading = false;
+        refresh();
     }
 }

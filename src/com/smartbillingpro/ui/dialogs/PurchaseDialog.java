@@ -7,10 +7,12 @@ import com.smartbillingpro.model.Purchase;
 import com.smartbillingpro.model.SellableItem;
 import com.smartbillingpro.model.Supplier;
 import com.smartbillingpro.service.PurchaseService;
+import com.smartbillingpro.ui.Collapsible;
 import com.smartbillingpro.ui.FormDialog;
 import com.smartbillingpro.ui.Icons;
 import com.smartbillingpro.ui.Msg;
 import com.smartbillingpro.ui.PickerDialog;
+import com.smartbillingpro.ui.PillGroup;
 import com.smartbillingpro.ui.Theme;
 import com.smartbillingpro.ui.Ui;
 import com.smartbillingpro.util.Money;
@@ -37,7 +39,7 @@ public final class PurchaseDialog extends FormDialog {
     private final AppContext ctx;
     private final JComboBox<Object> supplier = new JComboBox<>();
     private final JTextField billRef = Ui.field("Supplier's bill / invoice no.");
-    private final JTextField find = Ui.search("Scan barcode or search product to add");
+    private final JTextField find = Ui.search("Scan a barcode or type a product name, then press Enter");
     private final List<SellableItem> items = new ArrayList<>();
     private final DefaultTableModel model = new DefaultTableModel(new Object[] {"Product", "Qty", "Unit", "Unit cost",
         "Line total"}, 0) {
@@ -54,13 +56,27 @@ public final class PurchaseDialog extends FormDialog {
     private final JLabel total = Ui.heading(" ");
     private final JLabel due = new JLabel(" ");
     private final JTextField note = Ui.field("optional");
+    private final PillGroup<Pay> pay = new PillGroup<>();
+    private final JPanel paidRow;
+    private final JPanel methodRow;
+    private final JLabel emptyHint = Ui.muted("No products yet \u2013 scan or search above to add what you bought.");
     private Purchase saved;
+
+    private enum Pay {
+        FULL("Paid in full"), PART("Paid part of it"), NONE("Not paid yet");
+
+        final String label;
+
+        Pay(String label) {
+            this.label = label;
+        }
+    }
 
     public PurchaseDialog(Component parent, AppContext ctx, Long supplierId) {
         super(parent, "New purchase", "Save purchase");
         this.ctx = ctx;
-        setSubtitle("Stock is added and the supplier's balance is updated when you save.");
-        supplier.addItem("No supplier (cash purchase)");
+        setSubtitle("The stock is added and what you still owe is recorded when you save.");
+        supplier.addItem("Somewhere else (not a saved supplier)");
         for (Supplier s : ctx.parties().suppliers(false)) {
             supplier.addItem(s);
             if (supplierId != null && s.id() == supplierId) {
@@ -113,20 +129,40 @@ public final class PurchaseDialog extends FormDialog {
         Ui.onChange(discount, this::recalc);
         Ui.onChange(paid, this::recalc);
         supplier.addActionListener(e -> recalc());
-        total.setFont(Theme.bold(17));
+        total.setFont(Theme.bold(18));
         due.setFont(Theme.bold(13));
-        JButton payAll = Ui.ghost("Paid in full", "check");
-        payAll.addActionListener(e -> paid.setText(Money.plain(currentTotal())));
-        JPanel payRow = Ui.grid(3, 10, 0, Ui.row("Discount on bill", discount), Ui.row("Paid now", paid),
-                Ui.row("Paid by", method));
-        setBody(Ui.vbox(12, Ui.grid(2, 12, 0, Ui.row("Supplier", supRow), Ui.row("Bill number", billRef)),
-                Ui.row("Add products", find, "Press Enter to add. Edit quantity and cost directly in the table."),
-                sp, remove, payRow, Ui.flowLeft(10, payAll), Ui.row("Note", note), Ui.vbox(4, subtotal, total, due)));
+        pay.setItems(List.of(Pay.values()), x -> x.label);
+        pay.select(Pay.FULL);
+        pay.onChange(x -> {
+            updatePayRows();
+            recalc();
+            if (x == Pay.PART) {
+                paid.requestFocusInWindow();
+            }
+        });
+        paidRow = Ui.row("Amount paid now", paid);
+        methodRow = Ui.row("Paid by", method);
+        JPanel payDetails = Ui.grid(2, 12, 0, paidRow, methodRow);
+        Collapsible more = new Collapsible("Add bill number, discount or note", Ui.vbox(12,
+                Ui.grid(2, 12, 0, Ui.row("Supplier's bill number", billRef), Ui.row("Discount on the bill", discount)),
+                Ui.row("Note", note)));
+        emptyHint.setBorder(BorderFactory.createEmptyBorder(2, 2, 0, 0));
+        setBody(Ui.vbox(12, Ui.row("Bought from", supRow), Ui.row("What did you buy?", find), emptyHint, sp, remove,
+                Ui.vbox(4, subtotal, total), Ui.row("How did you pay?", pay), payDetails, due, more));
+        updatePayRows();
         recalc();
     }
 
     public Purchase saved() {
         return saved;
+    }
+
+    private void updatePayRows() {
+        Pay p = pay.selected();
+        paidRow.setVisible(p == Pay.PART);
+        methodRow.setVisible(p != Pay.NONE);
+        revalidate();
+        repaint();
     }
 
     private void addFromSearch() {
@@ -135,7 +171,7 @@ public final class PurchaseDialog extends FormDialog {
         if (item == null) {
             List<SellableItem> hits = ctx.inventory().search(q, 300);
             if (hits.isEmpty()) {
-                Msg.info(this, "Not found", "No product matches \"" + q + "\". Add it in Inventory first.");
+                showError("No product matches \u201c" + q + "\u201d. Add it in Inventory first, then come back.");
                 return;
             }
             item = hits.size() == 1 ? hits.get(0) : PickerDialog.pick(this, "Choose product", hits,
@@ -210,21 +246,26 @@ public final class PurchaseDialog extends FormDialog {
             }
             long disc = Money.parseOrZero(discount.getText());
             long tot = sub - disc;
-            long p = Money.parseOrZero(paid.getText());
-            subtotal.setText(items.size() + " line(s)   •   subtotal " + Money.format(sub));
+            Pay mode = pay.selected();
+            long p = mode == Pay.FULL ? tot : mode == Pay.NONE ? 0 : Money.parseOrZero(paid.getText());
+            subtotal.setText(items.isEmpty() ? " " : items.size() + (items.size() == 1 ? " product" : " products")
+                    + (disc > 0 ? "   \u2022   before discount " + Money.format(sub) : ""));
             total.setText("Bill total: " + Money.format(tot));
+            emptyHint.setVisible(items.isEmpty());
             long d = tot - p;
             boolean noSupplier = !(supplier.getSelectedItem() instanceof Supplier);
-            if (d > 0) {
+            if (tot <= 0) {
+                due.setText(" ");
+            } else if (d > 0) {
                 due.setForeground(noSupplier ? Theme.BAD : Theme.WARN);
-                due.setText(noSupplier ? "⚠ Select a supplier to keep " + Money.format(d) + " unpaid"
-                        : "Unpaid " + Money.format(d) + " is added to the supplier's balance");
+                due.setText(noSupplier ? "\u26A0 Choose who you bought from to keep " + Money.format(d) + " unpaid"
+                        : "You will owe " + Money.format(d) + " to this supplier");
             } else if (d < 0) {
                 due.setForeground(Theme.BAD);
-                due.setText("⚠ Paid amount is more than the bill total");
+                due.setText("\u26A0 You paid more than the bill total");
             } else {
                 due.setForeground(Theme.GOOD);
-                due.setText(tot > 0 ? "✓ Fully paid" : " ");
+                due.setText("\u2713 Fully paid");
             }
         } finally {
             recalcing = false;
@@ -237,11 +278,23 @@ public final class PurchaseDialog extends FormDialog {
             table.getCellEditor().stopCellEditing();
         }
         PaymentMethod m = (PaymentMethod) method.getSelectedItem();
-        long p = Ui.moneyValue(paid, "the amount paid", false);
+        Pay mode = pay.selected();
         Object s = supplier.getSelectedItem();
+        if (items.isEmpty()) {
+            find.requestFocusInWindow();
+            throw new com.smartbillingpro.db.AppException("Add at least one product you bought.");
+        }
+        if (mode == Pay.NONE && !(s instanceof Supplier)) {
+            throw new com.smartbillingpro.db.AppException("To buy on credit, choose who you bought from.");
+        }
+        long p = switch (mode) {
+            case FULL -> Math.max(0, currentTotal());
+            case PART -> Ui.moneyValue(paid, "the amount paid", true);
+            case NONE -> 0;
+        };
         saved = ctx.purchases().receive(new PurchaseService.PurchaseForm(s instanceof Supplier sup ? sup.id() : null,
                 billRef.getText(), lines(), Ui.moneyValue(discount, "the discount", false), p,
-                m == null ? null : m.id(), note.getText()));
+                m == null || p == 0 ? null : m.id(), note.getText()));
         return true;
     }
 }

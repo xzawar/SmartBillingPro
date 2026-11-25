@@ -111,6 +111,11 @@ public final class InventoryService {
         return stock.movements(fromInclusive, toExclusive, productId, search, 5000);
     }
 
+    /** The latest stock changes of one product, newest first. */
+    public List<StockMovement> recentMovements(long productId, int limit) {
+        return stock.movements(null, null, productId, null, limit);
+    }
+
     // ------------------------------------------------------------ products
 
     public long saveProduct(ProductForm f) {
@@ -279,6 +284,11 @@ public final class InventoryService {
     public boolean canDelete(long productId) {
         Product p = products.find(productId);
         return p != null && p.variants().stream().noneMatch(v -> v.stockQty() != 0 || products.variantHasHistory(v.id()));
+    }
+
+    /** The unit (pcs / kg / L...) can only change before any stock or sales exist. */
+    public boolean canChangeUnit(long productId) {
+        return canDelete(productId);
     }
 
     public void delete(long productId) {

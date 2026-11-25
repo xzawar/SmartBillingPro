@@ -26,6 +26,7 @@ public abstract class FormDialog extends JDialog {
     protected final JButton cancelButton;
     private final JPanel footerLeft = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0));
     private final JLabel subtitle = Ui.muted("");
+    private final JLabel error = new JLabel();
     private boolean saved;
 
     protected FormDialog(Component parent, String title, String primaryText) {
@@ -48,6 +49,10 @@ public abstract class FormDialog extends JDialog {
         cancelButton = Ui.secondary("Cancel", null);
         cancelButton.addActionListener(e -> dispose());
         primaryButton.addActionListener(e -> trySave());
+        error.setFont(Theme.bold(13));
+        error.setForeground(Theme.BAD);
+        error.setBorder(BorderFactory.createEmptyBorder(0, 22, 10, 22));
+        error.setVisible(false);
         JPanel footer = new JPanel(new BorderLayout());
         footer.setBackground(Theme.SURFACE_ALT);
         footer.setBorder(BorderFactory.createCompoundBorder(
@@ -56,7 +61,11 @@ public abstract class FormDialog extends JDialog {
         footerLeft.setOpaque(false);
         footer.add(footerLeft, BorderLayout.WEST);
         footer.add(Ui.flowRight(8, cancelButton, primaryButton), BorderLayout.EAST);
-        root.add(footer, BorderLayout.SOUTH);
+        JPanel bottom = new JPanel(new BorderLayout());
+        bottom.setOpaque(false);
+        bottom.add(error, BorderLayout.NORTH);
+        bottom.add(footer, BorderLayout.SOUTH);
+        root.add(bottom, BorderLayout.SOUTH);
         setContentPane(root);
         getRootPane().setDefaultButton(primaryButton);
         Ui.key(getRootPane(), "ESCAPE", this::dispose);
@@ -95,12 +104,30 @@ public abstract class FormDialog extends JDialog {
             if (onSave()) {
                 saved = true;
                 dispose();
+            } else {
+                showError(null);
             }
+        } catch (com.smartbillingpro.db.AppException | IllegalArgumentException e) {
+            showError(e.getMessage());
         } catch (RuntimeException e) {
+            showError(null);
             Msg.error(this, e);
         } finally {
             primaryButton.setEnabled(true);
         }
+    }
+
+    /** Show a problem right above the buttons (null hides it). The dialog stays open. */
+    protected void showError(String message) {
+        boolean show = message != null && !message.isBlank();
+        error.setText(show ? "<html><div style='width:" + Math.max(260, getWidth() - 80) + "px'>\u26A0  "
+                + message.replace("&", "&amp;").replace("<", "&lt;") + "</div></html>" : "");
+        error.setVisible(show);
+        if (show) {
+            java.awt.Toolkit.getDefaultToolkit().beep();
+        }
+        revalidate();
+        repaint();
     }
 
     protected void markSaved() {

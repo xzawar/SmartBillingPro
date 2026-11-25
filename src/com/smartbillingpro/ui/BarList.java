@@ -22,12 +22,20 @@ public final class BarList extends JComponent {
 
     private List<Item> items = new ArrayList<>();
     private final String emptyText;
+    private java.util.function.LongFunction<String> fullFormat = Money::format;
+    private java.util.function.LongFunction<String> shortFormat = v -> Money.symbol() + LineChart.compact(v);
     private static final int ROW = 30;
 
     public BarList(String emptyText) {
         this.emptyText = emptyText;
         setPreferredSize(new Dimension(360, 240));
         ToolTipManager.sharedInstance().registerComponent(this);
+    }
+
+    public void setFormat(java.util.function.LongFunction<String> full, java.util.function.LongFunction<String> shortForm) {
+        this.fullFormat = full;
+        this.shortFormat = shortForm;
+        repaint();
     }
 
     public void setItems(List<Item> items) {
@@ -43,7 +51,7 @@ public final class BarList extends JComponent {
             return null;
         }
         Item it = items.get(i);
-        return "<html><b>" + it.label() + "</b><br>" + Money.format(it.value())
+        return "<html><b>" + it.label() + "</b><br>" + fullFormat.apply(it.value())
                 + (it.detail() == null ? "" : "<br>" + it.detail()) + "</html>";
     }
 
@@ -54,10 +62,7 @@ public final class BarList extends JComponent {
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         int w = getWidth();
         if (items.isEmpty()) {
-            g2.setColor(Theme.MUTED);
-            g2.setFont(Theme.font(13));
-            int tw = g2.getFontMetrics().stringWidth(emptyText);
-            g2.drawString(emptyText, (w - tw) / 2, getHeight() / 2);
+            LineChart.paintEmpty(g2, w, getHeight(), emptyText);
             g2.dispose();
             return;
         }
@@ -86,7 +91,7 @@ public final class BarList extends JComponent {
             g2.fill(new RoundRectangle2D.Double(barX, y + 8, bw, 12, 12, 12));
             g2.setColor(Theme.TEXT);
             g2.setFont(Theme.bold(12));
-            String v = Money.symbol() + LineChart.compact(it.value());
+            String v = shortFormat.apply(it.value());
             g2.drawString(v, w - g2.getFontMetrics().stringWidth(v), y + 18);
             g2.setFont(Theme.font(12));
             y += ROW;

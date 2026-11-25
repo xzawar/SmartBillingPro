@@ -10,13 +10,13 @@ public record StockMovement(long id, long variantId, String productName, String 
 
     public String typeLabel() {
         return switch (type) {
-            case "OPENING" -> "Opening stock";
-            case "SALE" -> "Sale";
-            case "RETURN" -> "Customer return";
-            case "PURCHASE" -> "Purchase";
-            case "PURCHASE_REVERSAL" -> "Purchase reversed";
-            case "ADJUSTMENT_IN" -> "Adjustment (+)";
-            case "ADJUSTMENT_OUT" -> "Adjustment (−)";
+            case "OPENING" -> "Starting stock";
+            case "SALE" -> "Sold";
+            case "RETURN" -> "Returned by customer";
+            case "PURCHASE" -> "Bought";
+            case "PURCHASE_REVERSAL" -> "Purchase cancelled";
+            case "ADJUSTMENT_IN" -> "Added by hand";
+            case "ADJUSTMENT_OUT" -> "Removed by hand";
             default -> type;
         };
     }

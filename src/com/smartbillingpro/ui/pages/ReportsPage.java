@@ -2,7 +2,9 @@ package com.smartbillingpro.ui.pages;
 
 import com.smartbillingpro.service.ReportService;
 import com.smartbillingpro.service.ReportTable;
+import com.smartbillingpro.ui.BarList;
 import com.smartbillingpro.ui.Card;
+import com.smartbillingpro.ui.LineChart;
 import com.smartbillingpro.ui.DataTable;
 import com.smartbillingpro.ui.DateRangeBar;
 import com.smartbillingpro.ui.ExportBar;
@@ -18,7 +20,6 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import java.awt.BorderLayout;
@@ -36,8 +37,33 @@ public final class ReportsPage extends Page {
     private final JTextField search = Ui.search("Search in this report");
     private final JPanel tableHolder = new JPanel(new BorderLayout());
     private final JLabel footer = new JLabel(" ");
+    private Card chartCard;
     private DataTable<Object[]> table;
     private ReportTable current;
+    private final LineChart trend = new LineChart("Nothing recorded in this period");
+    private final BarList bars = new BarList("Nothing recorded in this period");
+    private final java.awt.CardLayout chartCards = new java.awt.CardLayout();
+    private final JPanel chartHolder = new JPanel(chartCards);
+
+    /** What to draw above a report's table: a trend of one or two columns, or the top rows as bars. */
+    private record ChartSpec(boolean trend, String valueColumn, String secondColumn) {
+    }
+
+    private static final java.util.Map<String, ChartSpec> CHARTS = java.util.Map.ofEntries(
+            java.util.Map.entry("sales.daily", new ChartSpec(true, "Net sales", null)),
+            java.util.Map.entry("sales.weekly", new ChartSpec(true, "Net sales", null)),
+            java.util.Map.entry("sales.monthly", new ChartSpec(true, "Net sales", null)),
+            java.util.Map.entry("profit.daily", new ChartSpec(true, "Gross profit", "Net profit")),
+            java.util.Map.entry("profit.monthly", new ChartSpec(true, "Gross profit", "Net profit")),
+            java.util.Map.entry("sales.products", new ChartSpec(false, "Net sales", null)),
+            java.util.Map.entry("sales.categories", new ChartSpec(false, "Net sales", null)),
+            java.util.Map.entry("sales.methods", new ChartSpec(false, "Sales total", null)),
+            java.util.Map.entry("profit.products", new ChartSpec(false, "Profit", null)),
+            java.util.Map.entry("stock.valuation", new ChartSpec(false, "Cost value", null)),
+            java.util.Map.entry("fin.receivables", new ChartSpec(false, "Balance", null)),
+            java.util.Map.entry("fin.payables", new ChartSpec(false, "Balance", null)),
+            java.util.Map.entry("fin.methods", new ChartSpec(false, "Net", null)),
+            java.util.Map.entry("fin.expenses", new ChartSpec(false, "Amount", null)));
 
     public ReportsPage(MainFrame frame) {
         super(frame, "Reports", "Sales, profit, stock and money – for any period");
@@ -108,16 +134,39 @@ public final class ReportsPage extends Page {
         footer.setFont(Theme.bold(13));
         footer.setForeground(Theme.TEXT);
         footer.setBorder(BorderFactory.createEmptyBorder(6, 4, 0, 4));
+        bars.setFormat(com.smartbillingpro.util.Money::format,
+                v -> com.smartbillingpro.util.Money.symbol() + LineChart.compact(v));
+        trend.setPreferredSize(new Dimension(300, 190));
+        bars.setPreferredSize(new Dimension(300, 190));
+        chartHolder.setOpaque(false);
+        chartHolder.add(trend, "trend");
+        chartHolder.add(bars, "bars");
+        chartHolder.add(new JPanel() {
+            {
+                setOpaque(false);
+            }
+        }, "none");
+        Card chartCard = new Card(new BorderLayout());
+        chartCard.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+        chartCard.add(chartHolder, BorderLayout.CENTER);
+        chartCard.setPreferredSize(new Dimension(300, 214));
+        JPanel center = new JPanel(new BorderLayout(0, 10));
+        center.setOpaque(false);
+        center.add(chartCard, BorderLayout.NORTH);
+        center.add(Ui.card(tableHolder, 4), BorderLayout.CENTER);
+        chartCard.putClientProperty("chart-card", Boolean.TRUE);
+        this.chartCard = chartCard;
         JPanel right = new JPanel(new BorderLayout(0, 10));
         right.setOpaque(false);
         right.add(head, BorderLayout.NORTH);
-        right.add(Ui.card(tableHolder, 4), BorderLayout.CENTER);
+        right.add(center, BorderLayout.CENTER);
         right.add(footer, BorderLayout.SOUTH);
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
-        split.setBorder(BorderFactory.createEmptyBorder());
-        split.setDividerLocation(240);
-        split.setResizeWeight(0.15);
-        setBody(split);
+        left.setPreferredSize(new Dimension(230, 200));
+        JPanel body = new JPanel(new BorderLayout(14, 0));
+        body.setOpaque(false);
+        body.add(left, BorderLayout.WEST);
+        body.add(right, BorderLayout.CENTER);
+        setBody(body);
         list.setSelectedIndex(1);
     }
 
@@ -148,7 +197,8 @@ public final class ReportsPage extends Page {
                 ReportTable.Column c = current.columns().get(i);
                 table.col(c.name(), kind(c.type()), r -> col < r.length ? r[col] : null, c.weight() * 45);
             }
-            table.setEmptyText(d.dated() ? "No records in this period." : "Nothing to show.");
+            table.setEmptyText(d.dated() ? "Nothing recorded in " + range.label().toLowerCase()
+                    + ". Try a longer period." : "Nothing to show yet.");
             table.setRows(current.rows());
             table.filter(search.getText());
             tableHolder.removeAll();
@@ -156,7 +206,48 @@ public final class ReportsPage extends Page {
             tableHolder.revalidate();
             tableHolder.repaint();
             footer.setText(footerText(current));
+            showChart(d.id());
         });
+    }
+
+    private void showChart(String id) {
+        ChartSpec spec = CHARTS.get(id);
+        int a = spec == null ? -1 : column(spec.valueColumn());
+        if (spec == null || a < 0 || current.rows().isEmpty()) {
+            chartCard.setVisible(false);
+            return;
+        }
+        chartCard.setVisible(true);
+        int b = spec.secondColumn() == null ? -1 : column(spec.secondColumn());
+        if (spec.trend()) {
+            java.util.List<LineChart.Point> pts = new java.util.ArrayList<>();
+            for (Object[] r : current.rows()) {
+                pts.add(new LineChart.Point(String.valueOf(r[0]), num(r[a]), b < 0 ? 0 : num(r[b])));
+            }
+            trend.setData(pts, spec.valueColumn(), b < 0 ? null : spec.secondColumn());
+            chartCards.show(chartHolder, "trend");
+        } else {
+            java.util.List<BarList.Item> items = current.rows().stream()
+                    .filter(r -> num(r[a]) > 0)
+                    .sorted((x, y) -> Long.compare(num(y[a]), num(x[a])))
+                    .limit(8)
+                    .map(r -> new BarList.Item(String.valueOf(r[0]), num(r[a]), null)).toList();
+            bars.setItems(items);
+            chartCards.show(chartHolder, "bars");
+        }
+    }
+
+    private int column(String name) {
+        for (int i = 0; i < current.columns().size(); i++) {
+            if (current.columns().get(i).name().equals(name)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static long num(Object o) {
+        return o instanceof Number n ? n.longValue() : 0;
     }
 
     private static String footerText(ReportTable t) {

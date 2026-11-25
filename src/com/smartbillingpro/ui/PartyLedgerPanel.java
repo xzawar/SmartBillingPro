@@ -27,10 +27,11 @@ public final class PartyLedgerPanel extends JPanel {
     private final PartyType type;
     private final DateRangeBar range = new DateRangeBar(DateRangeBar.Preset.THIS_YEAR);
     private final DataTable<LedgerEntry> table = new DataTable<>();
+    private final LineChart chart = new LineChart("No changes in this period");
     private final JLabel opening = Ui.muted(" ");
     private final JLabel closing = Ui.heading(" ");
     private final JButton pay;
-    private final JButton adjust = Ui.ghost("Adjust balance", "edit");
+    private final JButton adjust = Ui.ghost("Correct balance", "edit");
     private Long partyId;
     private String partyName = "";
     private Runnable onChange = () -> { };
@@ -42,14 +43,15 @@ public final class PartyLedgerPanel extends JPanel {
         setOpaque(false);
         boolean cust = type == PartyType.CUSTOMER;
         pay = Ui.primary(cust ? "Receive payment" : "Pay supplier", "money");
-        table.col("Date", DataTable.Kind.DATETIME, LedgerEntry::createdAt, 140)
-                .text("Type", LedgerEntry::typeLabel, 120)
-                .text("Reference", e -> Text.orDash(e.reference()), 100)
-                .text("Description", e -> Text.orDash(e.description()), 220)
-                .money(cust ? "Debit (charged)" : "Debit (paid)", e -> e.debit() == 0 ? null : e.debit())
-                .money(cust ? "Credit (received)" : "Credit (billed)", e -> e.credit() == 0 ? null : e.credit())
-                .signedMoney("Balance", LedgerEntry::balance);
-        table.setEmptyText("No transactions in this period.");
+        table.col("Date", DataTable.Kind.DATE, LedgerEntry::createdAt, 105)
+                .text("What happened", e -> Text.blank(e.description()) ? e.typeLabel()
+                        + (Text.blank(e.reference()) ? "" : " " + e.reference()) : e.description(), 230)
+                .money(cust ? "They bought" : "You paid", e -> e.debit() == 0 ? null : e.debit())
+                .money(cust ? "They paid" : "You bought", e -> e.credit() == 0 ? null : e.credit())
+                .signedMoney(cust ? "They owe" : "You owe", LedgerEntry::balance);
+        table.setEmptyText("Nothing happened on this account in this period.");
+        chart.setPreferredSize(new java.awt.Dimension(300, 150));
+        chart.setMinimumSize(new java.awt.Dimension(200, 120));
         range.onChange(this::reload);
         pay.addActionListener(e -> {
             if (partyId != null && new PaymentDialog(this, ctx, type, partyId, partyName).open(520)) {
@@ -67,14 +69,23 @@ public final class PartyLedgerPanel extends JPanel {
         });
         JPanel top = new JPanel(new BorderLayout());
         top.setOpaque(false);
-        top.add(range, BorderLayout.WEST);
+        top.add(range, BorderLayout.CENTER);
         top.add(ExportBar.create(ctx, this, this::asReport), BorderLayout.EAST);
         JPanel bottom = new JPanel(new BorderLayout());
         bottom.setOpaque(false);
         bottom.add(Ui.vbox(2, opening, closing), BorderLayout.WEST);
         bottom.add(Ui.flowRight(6, adjust, pay), BorderLayout.EAST);
         JPanel tableCard = Ui.card(table, 4);
-        add(top, BorderLayout.NORTH);
+        JLabel chartTitle = Ui.muted(cust ? "What they owed you over time" : "What you owed over time");
+        JPanel chartBox = new JPanel(new BorderLayout(0, 2));
+        chartBox.setOpaque(false);
+        chartBox.add(chartTitle, BorderLayout.NORTH);
+        chartBox.add(chart, BorderLayout.CENTER);
+        JPanel north = new JPanel(new BorderLayout(0, 8));
+        north.setOpaque(false);
+        north.add(top, BorderLayout.NORTH);
+        north.add(chartBox, BorderLayout.CENTER);
+        add(north, BorderLayout.NORTH);
         add(tableCard, BorderLayout.CENTER);
         add(bottom, BorderLayout.SOUTH);
         setBorder(BorderFactory.createEmptyBorder());
@@ -96,8 +107,9 @@ public final class PartyLedgerPanel extends JPanel {
     public void reload() {
         if (partyId == null) {
             table.setRows(List.of());
+            chart.setData(List.of(), "", null);
             opening.setText(" ");
-            closing.setText(type == PartyType.CUSTOMER ? "Select a customer" : "Select a supplier");
+            closing.setText(type == PartyType.CUSTOMER ? "Choose a customer" : "Choose a supplier");
             return;
         }
         String from = Dates.startOf(range.from());
@@ -105,12 +117,23 @@ public final class PartyLedgerPanel extends JPanel {
         table.setRows(rows);
         long open = ctx.parties().balanceBefore(type, partyId, from);
         long close = rows.isEmpty() ? open : rows.get(rows.size() - 1).balance();
-        opening.setText("Opening balance on " + Dates.formatDate(range.from()) + ": " + Money.format(open));
         boolean cust = type == PartyType.CUSTOMER;
-        closing.setForeground(close > 0 ? Theme.BAD : Theme.GOOD);
-        closing.setText(close > 0 ? (cust ? "Customer owes: " : "You owe: ") + Money.format(close)
-                : close < 0 ? "Advance: " + Money.format(-close) + (cust ? " (customer credit)" : " (paid in advance)")
-                : "✓ Settled – nothing outstanding");
+        opening.setText((cust ? "They owed " : "You owed ") + Money.format(open) + " on " + Dates.formatDate(range.from()));
+        closing.setForeground(close > 0 ? Theme.WARN : Theme.GOOD);
+        closing.setText(close > 0 ? (cust ? "They owe you " : "You owe ") + Money.format(close)
+                : close < 0 ? (cust ? "They paid " + Money.format(-close) + " ahead" : "You paid " + Money.format(-close)
+                + " ahead") : "\u2713 All settled \u2013 nothing owed");
+        java.util.LinkedHashMap<String, Long> perDay = new java.util.LinkedHashMap<>();
+        if (open != 0 || rows.isEmpty()) {
+            perDay.put(Dates.formatDate(range.from()), open);
+        }
+        for (LedgerEntry e : rows) {
+            perDay.put(Dates.formatDate(e.createdAt()), e.balance());
+        }
+        List<LineChart.Point> pts = new java.util.ArrayList<>();
+        perDay.forEach((d, v) -> pts.add(new LineChart.Point(d, v, 0)));
+        boolean flat = pts.stream().allMatch(x -> x.a() == 0);
+        chart.setData(flat ? List.of() : pts, cust ? "They owed" : "You owed", null);
     }
 
     /** The statement as a report for PDF / CSV / printing. */
