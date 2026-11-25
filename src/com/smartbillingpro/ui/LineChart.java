@@ -34,6 +34,11 @@ public final class LineChart extends JComponent {
     private String nameB;
     private int hover = -1;
     private final String emptyText;
+    private java.util.function.LongFunction<String> fullFormat = Money::format;
+    private java.util.function.LongFunction<String> axisFormat = v -> Money.symbol() + compact(v);
+    private long scale = 100;
+    private boolean wholeSteps;
+    private boolean bars;
 
     private static final int LEFT = 56;
     private static final int RIGHT = 14;
@@ -65,6 +70,26 @@ public final class LineChart extends JComponent {
         addMouseMotionListener(m);
     }
 
+    /** Show values as something other than money (e.g. quantities). */
+    public void setFormat(java.util.function.LongFunction<String> full, java.util.function.LongFunction<String> axis) {
+        this.fullFormat = full;
+        this.axisFormat = axis;
+        repaint();
+    }
+
+    /** How many stored units make one shown unit (100 for money, 1000 for quantities); whole steps avoid 2.5-type ticks. */
+    public void setScale(long unitsPerOne, boolean wholeSteps) {
+        this.scale = Math.max(1, unitsPerOne);
+        this.wholeSteps = wholeSteps;
+        repaint();
+    }
+
+    /** Draw one bar per point instead of a line (better for counts per day). Single series only. */
+    public void setBars(boolean bars) {
+        this.bars = bars;
+        repaint();
+    }
+
     public void setData(List<Point> data, String seriesA, String seriesB) {
         this.points = data;
         this.nameA = seriesA;
@@ -75,6 +100,9 @@ public final class LineChart extends JComponent {
 
     private double xOf(int i) {
         int plotW = getWidth() - LEFT - RIGHT;
+        if (bars) {
+            return LEFT + plotW * (i + 0.5) / Math.max(1, points.size());
+        }
         return points.size() <= 1 ? LEFT + plotW / 2.0 : LEFT + plotW * i / (double) (points.size() - 1);
     }
 
@@ -101,9 +129,9 @@ public final class LineChart extends JComponent {
             return null;
         }
         Point p = points.get(i);
-        String s = "<html><b>" + p.label() + "</b><br>" + nameA + ": " + Money.format(p.a());
+        String s = "<html><b>" + p.label() + "</b><br>" + nameA + ": " + fullFormat.apply(p.a());
         if (nameB != null) {
-            s += "<br>" + nameB + ": " + Money.format(p.b());
+            s += "<br>" + nameB + ": " + fullFormat.apply(p.b());
         }
         return s + "</html>";
     }
@@ -129,18 +157,38 @@ public final class LineChart extends JComponent {
         return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;
     }
 
-    private static long niceMax(long max) {
+    /** Top of the axis: four equal, round steps that cover {@code max}. */
+    private long niceMax(long max) {
         if (max <= 0) {
-            return 100_00;
+            return 4 * scale;
         }
-        double raw = max / 100.0;
-        double mag = Math.pow(10, Math.floor(Math.log10(raw)));
-        for (double s : new double[] {1, 2, 2.5, 5, 10}) {
-            if (raw <= s * mag) {
-                return (long) Math.ceil(s * mag * 100);
+        double rawStep = max / (double) scale / 4.0;
+        double mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+        double step = 10 * mag;
+        for (double s : wholeSteps ? new double[] {1, 2, 5, 10} : new double[] {1, 2, 2.5, 5, 10}) {
+            if (rawStep <= s * mag) {
+                step = s * mag;
+                break;
             }
         }
-        return (long) Math.ceil(10 * mag * 100);
+        if (wholeSteps && step < 1) {
+            step = 1;
+        }
+        return (long) Math.ceil(step * 4 * scale);
+    }
+
+    /** Calm placeholder: a soft chart icon and one line of text. */
+    static void paintEmpty(Graphics2D g2, int w, int h, String text) {
+        int s = 52;
+        int x = (w - s) / 2;
+        int y = Math.max(4, h / 2 - s);
+        g2.setColor(Theme.ACCENT_SOFT);
+        g2.fillOval(x, y, s, s);
+        Icons.get("reports", 24, Theme.ACCENT_INK).paintIcon(null, g2, x + 14, y + 14);
+        g2.setFont(Theme.font(13));
+        g2.setColor(Theme.MUTED);
+        int tw = g2.getFontMetrics().stringWidth(text);
+        g2.drawString(text, Math.max(4, (w - tw) / 2), y + s + 22);
     }
 
     /** Monotone cubic path through the points (no overshoot below zero). */
@@ -181,10 +229,7 @@ public final class LineChart extends JComponent {
         FontMetrics fm = g2.getFontMetrics();
         boolean allZero = points.stream().allMatch(p -> p.a() == 0 && p.b() == 0);
         if (points.isEmpty() || allZero) {
-            g2.setColor(Theme.MUTED);
-            g2.setFont(Theme.font(13));
-            int tw = g2.getFontMetrics().stringWidth(emptyText);
-            g2.drawString(emptyText, (w - tw) / 2, h / 2);
+            paintEmpty(g2, w, h, emptyText);
             g2.dispose();
             return;
         }
@@ -218,13 +263,42 @@ public final class LineChart extends JComponent {
             g2.setColor(v == 0 ? Theme.BORDER_STRONG : Theme.GRID);
             g2.drawLine(LEFT, y, w - RIGHT, y);
             g2.setColor(Theme.MUTED);
-            String label = Money.symbol() + compact(v);
+            String label = axisFormat.apply(v);
             g2.drawString(label, LEFT - 10 - fm.stringWidth(label), y + 4);
         }
         int n = points.size();
         double[] xs = new double[n];
         for (int i = 0; i < n; i++) {
             xs[i] = xOf(i);
+        }
+        if (bars && series == 1) {
+            int plotW = w - LEFT - RIGHT;
+            double band = plotW / (double) n;
+            double bw = Math.max(2, Math.min(22, band * 0.62));
+            double base = yOf.applyAsDouble(Math.max(0, bottom));
+            for (int i = 0; i < n; i++) {
+                long v = points.get(i).a();
+                if (v == 0) {
+                    continue;
+                }
+                double y = yOf.applyAsDouble(v);
+                double barTop = Math.min(y, base);
+                double hgt = Math.max(2, Math.abs(base - y));
+                g2.setColor(i == hover ? Theme.SERIES_1.darker() : Theme.SERIES_1);
+                double r = Math.min(6, bw / 2);
+                Path2D bar = new Path2D.Double();
+                bar.moveTo(xs[i] - bw / 2, barTop + hgt);
+                bar.lineTo(xs[i] - bw / 2, barTop + r);
+                bar.quadTo(xs[i] - bw / 2, barTop, xs[i] - bw / 2 + r, barTop);
+                bar.lineTo(xs[i] + bw / 2 - r, barTop);
+                bar.quadTo(xs[i] + bw / 2, barTop, xs[i] + bw / 2, barTop + r);
+                bar.lineTo(xs[i] + bw / 2, barTop + hgt);
+                bar.closePath();
+                g2.fill(bar);
+            }
+            paintXLabels(g2, fm, xs, w, h);
+            g2.dispose();
+            return;
         }
         if (hover >= 0) {
             g2.setColor(Theme.BORDER_STRONG);
@@ -262,16 +336,25 @@ public final class LineChart extends JComponent {
                 g2.fill(new Ellipse2D.Double(xs[i] - r, ys[i] - r, r * 2, r * 2));
             }
         }
+        paintXLabels(g2, fm, xs, w, h);
+        g2.dispose();
+    }
+
+    private void paintXLabels(Graphics2D g2, FontMetrics fm, double[] xs, int w, int h) {
+        int n = xs.length;
         g2.setFont(Theme.font(11));
         g2.setColor(Theme.MUTED);
         int plotW = w - LEFT - RIGHT;
-        int every = Math.max(1, (int) Math.ceil(n / Math.max(1.0, plotW / 62.0)));
+        int widest = 0;
+        for (Point p : points) {
+            widest = Math.max(widest, fm.stringWidth(p.label()));
+        }
+        int every = Math.max(1, (int) Math.ceil(n / Math.max(1.0, plotW / (double) (widest + 14))));
         for (int i = 0; i < n; i += every) {
             String l = points.get(i).label();
             int lw = fm.stringWidth(l);
             int x = (int) Math.max(0, Math.min(w - lw, xs[i] - lw / 2.0));
             g2.drawString(l, x, h - 8);
         }
-        g2.dispose();
     }
 }

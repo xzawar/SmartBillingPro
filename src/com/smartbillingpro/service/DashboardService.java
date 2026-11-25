@@ -45,19 +45,24 @@ public final class DashboardService {
         long purchases = db.scalar("SELECT COALESCE(SUM(total), 0) FROM purchases WHERE status = 'RECEIVED' "
                 + "AND created_at >= ? AND created_at < ?", Dates.startOf(from), Dates.endExclusive(to));
         long[] inv = new long[4];
-        db.list("SELECT v.stock_qty, v.min_stock, v.cost_price, v.sale_price FROM product_variants v "
+        Map<Long, StockStatus> worst = new java.util.HashMap<>();
+        db.list("SELECT v.stock_qty, v.min_stock, v.cost_price, v.sale_price, p.id FROM product_variants v "
                 + "JOIN products p ON p.id = v.product_id WHERE p.active = 1 AND v.active = 1", rs -> {
                     long stock = rs.getLong(1);
-                    inv[0] += Money.mulQty(rs.getLong(3), stock);
-                    inv[1] += Money.mulQty(rs.getLong(4), stock);
+                    inv[0] += Money.mulQty(rs.getLong(3), Math.max(0, stock));
+                    inv[1] += Money.mulQty(rs.getLong(4), Math.max(0, stock));
                     StockStatus st = StockStatus.of(stock, rs.getLong(2));
-                    if (st == StockStatus.LOW) {
-                        inv[2]++;
-                    } else if (st == StockStatus.OUT) {
-                        inv[3]++;
-                    }
+                    worst.merge(rs.getLong(5), st, (a, b) -> a.ordinal() >= b.ordinal() ? a : b);
                     return null;
                 });
+        // counted per product (a product with one size out of stock counts as out), like the Inventory screen
+        for (StockStatus st : worst.values()) {
+            if (st == StockStatus.LOW) {
+                inv[2]++;
+            } else if (st == StockStatus.OUT) {
+                inv[3]++;
+            }
+        }
         long products = db.scalar("SELECT COUNT(*) FROM products WHERE active = 1");
         long customers = db.scalar("SELECT COUNT(*) FROM customers WHERE active = 1");
         return new Overview(todayNet, t.receipts(), t.grossProfit(), purchases, p.expenses(), inv[0], inv[1], products,
@@ -151,6 +156,76 @@ public final class DashboardService {
                 rs -> new String[] {rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)}, limit);
     }
 
+    /** Quantity sold (value, in thousandths, after returns) and money taken (value2) per day for one product. */
+    public List<Point> productSales(long productId, LocalDate from, LocalDate to) {
+        Map<String, long[]> m = new java.util.HashMap<>();
+        db.list("SELECT substr(s.created_at, 1, 10), SUM(si.quantity - si.returned_qty), SUM(si.line_total) "
+                + "FROM sale_items si JOIN sales s ON s.id = si.sale_id "
+                + "WHERE si.product_id = ? AND s.created_at >= ? AND s.created_at < ? GROUP BY 1", rs -> {
+                    m.put(rs.getString(1), new long[] {rs.getLong(2), rs.getLong(3)});
+                    return null;
+                }, productId, Dates.startOf(from), Dates.endExclusive(to));
+        List<Point> out = new ArrayList<>();
+        for (String key : buckets(from, to, ReportService.Grouping.DAY)) {
+            long[] v = m.getOrDefault(key, new long[2]);
+            out.add(new Point(key, shortLabel(key, ReportService.Grouping.DAY), v[0], v[1]));
+        }
+        return out;
+    }
+
+    /** What one customer bought (value, after returns) per month for the last {@code months} months, oldest first. */
+    public List<Point> customerMonthly(long customerId, int months) {
+        LocalDate from = LocalDate.now().withDayOfMonth(1).minusMonths(months - 1L);
+        Map<String, Long> m = new java.util.HashMap<>();
+        db.list("SELECT substr(created_at, 1, 7), SUM(grand_total - returned_total) FROM sales "
+                + "WHERE customer_id = ? AND created_at >= ? GROUP BY 1", rs -> {
+                    m.put(rs.getString(1), rs.getLong(2));
+                    return null;
+                }, customerId, Dates.startOf(from));
+        return months(from, months, m);
+    }
+
+    /** What the shop bought from one supplier (value) per month for the last {@code months} months, oldest first. */
+    public List<Point> supplierMonthly(long supplierId, int months) {
+        LocalDate from = LocalDate.now().withDayOfMonth(1).minusMonths(months - 1L);
+        Map<String, Long> m = new java.util.HashMap<>();
+        db.list("SELECT substr(created_at, 1, 7), SUM(total) FROM purchases "
+                + "WHERE supplier_id = ? AND status = 'RECEIVED' AND created_at >= ? GROUP BY 1", rs -> {
+                    m.put(rs.getString(1), rs.getLong(2));
+                    return null;
+                }, supplierId, Dates.startOf(from));
+        return months(from, months, m);
+    }
+
+    private static List<Point> months(LocalDate from, int months, Map<String, Long> values) {
+        List<Point> out = new ArrayList<>();
+        for (int i = 0; i < months; i++) {
+            LocalDate d = from.plusMonths(i);
+            String key = String.format("%04d-%02d", d.getYear(), d.getMonthValue());
+            out.add(new Point(key, shortLabel(d.format(Dates.ISO_DATE), ReportService.Grouping.MONTH),
+                    values.getOrDefault(key, 0L), 0));
+        }
+        return out;
+    }
+
+    /** Money received from customers per payment method (refunds subtracted), largest first. */
+    public List<Point> paymentSplit(LocalDate from, LocalDate to) {
+        return db.list("SELECT COALESCE(NULLIF(payment_method_name, ''), 'Other') AS m, "
+                + "SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS total FROM payments "
+                + "WHERE party_type IN ('CUSTOMER', 'WALK_IN') AND created_at >= ? AND created_at < ? "
+                + "GROUP BY m HAVING total > 0 ORDER BY total DESC",
+                rs -> new Point(rs.getString(1), rs.getString(1), rs.getLong(2), 0),
+                Dates.startOf(from), Dates.endExclusive(to));
+    }
+
+    /** Expenses per category in the period, largest first. */
+    public List<Point> expensesByCategory(LocalDate from, LocalDate to) {
+        return db.list("SELECT category, SUM(amount) AS total FROM expenses WHERE status = 'ACTIVE' "
+                + "AND expense_date >= ? AND expense_date <= ? GROUP BY category ORDER BY total DESC",
+                rs -> new Point(rs.getString(1), rs.getString(1), rs.getLong(2), 0),
+                from.format(Dates.ISO_DATE), to.format(Dates.ISO_DATE));
+    }
+
     private static List<String> buckets(LocalDate from, LocalDate to, ReportService.Grouping g) {
         List<String> keys = new ArrayList<>();
         var bucket = ReportService.bucket(g);
@@ -176,7 +251,7 @@ public final class DashboardService {
             case WEEK -> "Wk " + d.getDayOfMonth() + " " + d.getMonth().getDisplayName(java.time.format.TextStyle.SHORT,
                     java.util.Locale.ENGLISH);
             case MONTH -> d.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)
-                    + " " + (d.getYear() % 100);
+                    + " " + d.getYear();
         };
     }
 }

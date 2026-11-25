@@ -36,6 +36,10 @@ public final class Settings {
     public static final String POS_DEFAULT_METHOD = "pos.default_method";
     public static final String LOW_STOCK_DEFAULT = "inventory.low_stock_default";
     public static final String PIN_HASH = "security.pin_hash";
+    /** "true" once the first-run shop setup has been completed or dismissed. */
+    public static final String SETUP_DONE = "setup.done";
+    /** "true" once the owner hides the "Get your shop ready" checklist on the dashboard. */
+    public static final String CHECKLIST_HIDDEN = "setup.checklist_hidden";
 
     /** What happens after a sale is completed. */
     public enum AfterSale {
@@ -100,6 +104,8 @@ public final class Settings {
         d.put(POS_DEFAULT_METHOD, "");
         d.put(LOW_STOCK_DEFAULT, "5");
         d.put(PIN_HASH, "");
+        d.put(SETUP_DONE, "false");
+        d.put(CHECKLIST_HIDDEN, "false");
         return d;
     }
 
@@ -269,6 +275,14 @@ public final class Settings {
 
     public String pinHash() {
         return get(PIN_HASH);
+    }
+
+    public boolean setupDone() {
+        return bool(SETUP_DONE);
+    }
+
+    public boolean checklistHidden() {
+        return bool(CHECKLIST_HIDDEN);
     }
 
     public boolean pinEnabled() {

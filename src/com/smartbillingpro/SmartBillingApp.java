@@ -90,6 +90,20 @@ public final class SmartBillingApp {
         frame.setVisible(true);
         ctx.startBackupScheduler(status -> frame.updateBackupStatus());
         offerLegacyImport(frame, ctx);
+        offerShopSetup(frame, ctx);
+    }
+
+    /** Brand-new install: ask for the shop's name and the few details printed on receipts, one at a time. */
+    private static void offerShopSetup(MainFrame frame, AppContext ctx) {
+        try {
+            if (com.smartbillingpro.ui.flows.ShopSetupFlow.needed(ctx)) {
+                com.smartbillingpro.ui.flows.ShopSetupFlow.open(frame, ctx);
+                frame.storeNameChanged();
+                frame.reloadAll(MainFrame.DASHBOARD);
+            }
+        } catch (RuntimeException e) {
+            Msg.error(frame, e);
+        }
     }
 
     /** First run after upgrading from the online version: offer to bring the old products across. */

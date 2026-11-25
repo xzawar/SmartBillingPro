@@ -100,10 +100,32 @@ two dashboard references). Tokens live only in `ui/Theme.java`:
   grid, pastel tinted summary cards with solid icon tiles, smooth line charts
   (validated violet/aqua pair, legend + hover tooltips).
 
+### Interaction patterns
+
+* **One question at a time** — `ui/Wizard` shows a single question per
+  screen with inline validation, a progress line, *Skip* where an answer is
+  optional and a closing summary whose *Change* links jump to one question
+  and come back. Used by `ui/flows/ProductFlow` (add / edit product),
+  `StockFlow` (change stock with a reason) and `ShopSetupFlow` (first start).
+  Rare details are only offered from the summary.
+* **Short forms** — `FormDialog` shows problems inline above its buttons;
+  customer, supplier, purchase and expense forms ask only the essentials and
+  keep the rest under a `Collapsible` "more details".
+* **Lists, not tables or cards, for things you pick** — `RowList` (avatar,
+  two lines, value and status) with a friendly `EmptyState` and a "no
+  matches" state; master–detail screens use `ui/Detail` (header, tiles,
+  sections). The till's bill is a `CartList` with − / + / × on every line.
+* **Choices as taps** — `PillGroup` (payment method, filters) and
+  `OptionList` (big one-tap answers inside flows).
+* **Charts from real data only** — `LineChart` (line or bar mode) and
+  `BarList`, fed by `DashboardService` queries (daily product sales, monthly
+  customer / supplier totals, payment split, expenses by category) that a
+  test checks against the recorded transactions.
+
 ## 7. Testing
 
 `test/` holds a dependency-free runner (`run-tests.bat` / `./run-tests.sh`)
-with 23 tests on real temporary databases: money/quantity maths, weight
+with 24 tests on real temporary databases: money/quantity maths, weight
 conversion, cart discounts/tax allocation, products/variations/barcode
 uniqueness, stock adjustments and immutability triggers, cash/credit/partial
 sales, rollback when stock runs out, duplicate-sale protection, returns,
@@ -111,10 +133,11 @@ held sales, purchases & supplier ledger, report and dashboard figures,
 persistence across restarts, backup/validate/restore, corrupt-backup
 rejection, daily backup + retention, backups during concurrent sales,
 legacy import, receipt fit at 48/58/80 mm, ESC/POS line widths, A4/roll PDFs
-(parsed back with PDFBox), multi-page receipts, PDF + CSV for all 25 reports.
-The UI was exercised under a virtual display with a simulated USB scanner
-(fast keystrokes + Enter), the weight dialog, the unknown-barcode flow and
-F12 checkout; the packaged app was launched inside a network namespace with
+(parsed back with PDFBox), multi-page receipts, PDF + CSV for all 25 reports,
+and the chart figures. The UI was exercised under a virtual display with a
+simulated USB scanner (fast keystrokes + Enter), the weight dialog, the
+keyboard-only add-product flow, the unknown-barcode flow and F12 checkout,
+and every screen was checked at 1024×640, 1366×768 and 1920×1080; the packaged app was launched inside a network namespace with
 no network at all.
 
 ## 8. Known limitations

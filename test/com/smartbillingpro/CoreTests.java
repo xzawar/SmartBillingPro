@@ -375,6 +375,60 @@ final class CoreTests {
         }
     }
 
+    /** The numbers behind the new charts come straight from the recorded sales, purchases and expenses. */
+    static void testChartFiguresMatchTransactions() throws Exception {
+        try (AppContext ctx = TestSupport.newContext(TestSupport.tempDir())) {
+            long pen = TestSupport.simpleProduct(ctx, "Pen", "P1", "20", "50", "100", "pcs");
+            long productId = ctx.inventory().sellable(pen).productId();
+            long cash = TestSupport.cashMethod(ctx);
+            long card = ctx.settings().paymentMethods(true).stream().filter(m -> m.name().equals("Card")).findFirst()
+                    .orElseThrow().id();
+            long ali = ctx.parties().saveCustomer(null, "Ali", null, null, null, 0, true);
+            long hamza = ctx.parties().saveSupplier(null, "Hamza Traders", null, null, null, null, 0, true);
+
+            Cart credit = new Cart();
+            credit.setCustomer(ctx.parties().customer(ali));
+            credit.add(ctx.inventory().sellable(pen), Qty.of(2));
+            ctx.sales().complete(credit, new SaleService.PaymentInput(cash, money("40"), null));
+            Cart walkIn = new Cart();
+            walkIn.add(ctx.inventory().sellable(pen), Qty.of(1));
+            ctx.sales().complete(walkIn, new SaleService.PaymentInput(card, money("50"), null));
+            ctx.purchases().receive(new PurchaseService.PurchaseForm(hamza, "B-1",
+                    List.of(new PurchaseService.Line(pen, Qty.of(10), money("20"))), 0, 0, null, null));
+            LocalDate today = LocalDate.now();
+            ctx.expenses().add(today, "Electricity", money("150"), cash, null);
+            ctx.expenses().add(today, "Rent", money("500"), cash, null);
+            ctx.expenses().add(today, "Electricity", money("50"), cash, null);
+
+            var perDay = ctx.dashboard().productSales(productId, today.minusDays(6), today);
+            eq(7, perDay.size(), "one point per day, empty days included");
+            eq(Qty.of(3), perDay.get(6).value(), "3 pens sold today");
+            eq(money("150"), perDay.get(6).value2(), "money taken for pens today");
+            eq(0L, perDay.get(0).value(), "nothing sold 6 days ago");
+
+            var bought = ctx.dashboard().customerMonthly(ali, 6);
+            eq(6, bought.size(), "six months");
+            eq(money("100"), bought.get(5).value(), "Ali bought Rs 100 this month");
+            var supplied = ctx.dashboard().supplierMonthly(hamza, 6);
+            eq(money("200"), supplied.get(5).value(), "bought Rs 200 from Hamza this month");
+
+            var split = ctx.dashboard().paymentSplit(today, today);
+            eq(2, split.size(), "two ways of paying used");
+            eq("Card", split.get(0).label(), "largest first");
+            eq(money("50"), split.get(0).value(), "card total");
+            eq(money("40"), split.get(1).value(), "cash actually received (the rest is on credit)");
+
+            var spent = ctx.dashboard().expensesByCategory(today, today);
+            eq("Rent", spent.get(0).label(), "largest category first");
+            eq(money("200"), spent.get(1).value(), "electricity added up");
+
+            var recent = ctx.inventory().recentMovements(productId, 2);
+            eq(2, recent.size(), "limited to 2");
+            eq("PURCHASE", recent.get(0).type(), "newest change first");
+            eq(Qty.of(10), recent.get(0).qtyChange(), "10 pens bought");
+        }
+    }
+
     static void testPersistenceAfterRestart() throws Exception {
         Path dir = TestSupport.tempDir();
         long v;

@@ -17,7 +17,8 @@ public final class DateRangeBar extends JPanel {
 
     public enum Preset {
         TODAY("Today"), YESTERDAY("Yesterday"), LAST_7("Last 7 days"), LAST_30("Last 30 days"),
-        THIS_MONTH("This month"), LAST_MONTH("Last month"), THIS_YEAR("This year"), CUSTOM("Custom range");
+        THIS_MONTH("This month"), LAST_MONTH("Last month"), THIS_YEAR("This year"), ALL_TIME("All time"),
+        CUSTOM("Custom range");
 
         private final String label;
 
@@ -34,6 +35,9 @@ public final class DateRangeBar extends JPanel {
     private final JComboBox<Preset> preset = new JComboBox<>(Preset.values());
     private final JSpinner from = dateSpinner();
     private final JSpinner to = dateSpinner();
+    private final javax.swing.JLabel fromLabel = Ui.muted("From");
+    private final javax.swing.JLabel toLabel = Ui.muted("to");
+    private final javax.swing.JLabel summary = Ui.muted("");
     private Runnable onChange = () -> { };
     private boolean adjusting;
 
@@ -42,17 +46,36 @@ public final class DateRangeBar extends JPanel {
         setOpaque(false);
         preset.setSelectedItem(initial);
         add(preset);
-        add(Ui.muted("From"));
+        add(summary);
+        add(fromLabel);
         add(from);
-        add(Ui.muted("to"));
+        add(toLabel);
         add(to);
         applyPreset();
+        updateVisibility();
         preset.addActionListener(e -> {
             applyPreset();
+            updateVisibility();
             fire();
         });
         from.addChangeListener(e -> customChanged());
         to.addChangeListener(e -> customChanged());
+    }
+
+    /** Only show the date boxes when the user asks for a custom range. */
+    private void updateVisibility() {
+        boolean custom = preset.getSelectedItem() == Preset.CUSTOM;
+        fromLabel.setVisible(custom);
+        from.setVisible(custom);
+        toLabel.setVisible(custom);
+        to.setVisible(custom);
+        summary.setVisible(!custom);
+        LocalDate a = from();
+        LocalDate b = to();
+        summary.setText(preset.getSelectedItem() == Preset.ALL_TIME ? "Everything so far"
+                : a.equals(b) ? Dates.formatDate(a) : Dates.formatDate(a) + "  \u2013  " + Dates.formatDate(b));
+        revalidate();
+        repaint();
     }
 
     private static JSpinner dateSpinner() {
@@ -68,6 +91,7 @@ public final class DateRangeBar extends JPanel {
         }
         adjusting = true;
         preset.setSelectedItem(Preset.CUSTOM);
+        updateVisibility();
         if (to() .isBefore(from())) {
             set(to, from());
         }
@@ -93,6 +117,7 @@ public final class DateRangeBar extends JPanel {
                 b = t.withDayOfMonth(1).minusDays(1);
             }
             case THIS_YEAR -> a = t.withDayOfYear(1);
+            case ALL_TIME -> a = LocalDate.of(2000, 1, 1);
             default -> {
                 return;
             }
@@ -126,6 +151,11 @@ public final class DateRangeBar extends JPanel {
 
     public void onChange(Runnable r) {
         this.onChange = r;
+    }
+
+    /** Switch to a preset (notifies the listener like a user choice would). */
+    public void setPreset(Preset p) {
+        preset.setSelectedItem(p);
     }
 
     private void fire() {

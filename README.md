@@ -7,14 +7,14 @@ online account and no server are needed.
 
 | | |
 |---|---|
-| **Sales (POS)** | Barcode scanning (USB scanners work anywhere in the window), search, category filters, product grid, variations (sizes…), sale by weight/volume (e.g. 250 g of a per-kg product), line & bill discounts, tax, hold/recall, cash/bank/other payment methods, change and part-payment on a customer's account, keyboard shortcuts |
-| **Inventory** | Categories, products with variations (own barcode, SKU, prices, stock each), units (pcs, kg, g, mg, L, ml, m, cm + custom), duplicate-barcode protection, pictures, low/out-of-stock alerts, stock adjustments with reasons, full stock movement history, archive instead of delete |
+| **Sales (POS)** | Barcode scanning (USB scanners work anywhere in the window), search, category filters, a simple product list, sizes/variations, sale by weight/volume (e.g. 250 g of a per-kg product), line & bill discounts, tax, hold/recall, cash/bank/other payment methods, change and part-payment on a customer's account, keyboard shortcuts |
+| **Inventory** | Add products one question at a time (name → how it is sold → sizes → barcode → price → cost → stock → category), sizes/variations (own barcode, SKU, prices, stock each), units (pcs, kg, g, mg, L, ml, m, cm + custom), duplicate-barcode protection, pictures, low/out-of-stock alerts, "Change stock" with plain reasons, full stock history, a 30-day sales chart per product, hide instead of delete |
 | **Suppliers** | Supplier accounts, purchases (full / partial / credit), moving-average cost, purchase reversal, payments, statements |
 | **Ledgers** | Customer and supplier ledgers with running balances, payments, adjustments, reversals, PDF/Excel/print statements, expenses |
-| **Customers** | Accounts, purchase history, receipts, total paid, outstanding balance, receive payments; walk-in sales need no customer |
+| **Customers** | Name + phone is all that is needed; balance, monthly purchases chart, recent receipts, receive payments; walk-in sales need no customer |
 | **Receipts** | Every sale stored; search by number/customer/date/method/status; preview, reprint, **PDF** (A4 or roll), **58 / 80 mm thermal** (driver or ESC/POS), returns & refunds |
 | **Reports** | 25 reports: daily/weekly/monthly/product/category/payment-method sales, returns, P&L, daily/monthly/product profit, stock, low/out of stock, valuation, movements, purchase history, customer/supplier balances, cash received, credit sales, payments made, cash book, expenses — all with date filters, search, PDF, CSV (Excel) and print |
-| **Dashboard** | Today's sales & profit, purchases, inventory value, products, low stock, customers, receivables, payables, sales trend, profit vs expenses, top products, category sales, stock overview — all from real data |
+| **Dashboard** | "Get your shop ready" checklist for new shops; today's sales & profit, running low, receivables, payables, stock value; charts of sales, profit vs expenses, how customers paid, best sellers, category sales and stock — all from real data |
 | **Tools & Settings** | Store details, currency (PKR by default), date format, tax, receipt texts & numbering, printer setup + test print, payment methods, units, backup & restore, optional startup PIN, import from the previous version |
 
 ## Install on Windows (no Java needed)

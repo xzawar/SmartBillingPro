@@ -5,92 +5,123 @@ the left; `Ctrl+1` … `Ctrl+9` jump between them.
 
 ## 1. First start
 
-1. Open **Tools & Settings › Store** and enter your shop name, address and
-   phone (they appear on receipts). Currency is **Rs / PKR** by default.
-2. **Tools & Settings › Sales & receipts**: turn tax on if you charge it,
-   set the receipt prefix (e.g. `INV` → `INV-000001`), footer text and what
-   happens after a sale (print automatically / show the receipt / nothing).
-3. **Tools & Settings › Printer**: choose your receipt printer and paper
-   width, then **Print test receipt** (see §8).
-4. **Tools & Settings › Backup & restore**: choose a backup folder, ideally
-   on a USB drive or a second disk (see §7).
-5. If you used the previous online version on this computer, the app offers
-   to **import** products, categories, suppliers, customers and shop details
-   on first start (also available under *Security & data*).
+The first time the app opens it asks a few short questions, one at a time:
+your shop's name, phone number and address (all printed on receipts) and
+whether you add sales tax. Anything you skip can be changed later in
+**Tools & Settings**. Currency is **Rs / PKR** by default.
+
+The **Dashboard** then shows a short **Get your shop ready** list (add a
+product, make a first sale, choose the receipt printer, make a first backup)
+with one button for each step. Hide it whenever you like.
+
+If you used the previous online version on this computer, the app offers to
+**import** products, categories, suppliers, customers and shop details on
+first start (also available under *Tools & Settings › Security & data*).
 
 ## 2. Adding products
 
-**Inventory › Add product** (or `Ctrl+N` on the Inventory tab).
+**Inventory › Add product** (or `Ctrl+N`), or simply scan a barcode on the
+Sales screen that the app doesn't know yet. Adding a product asks **one
+question per screen**, and `Enter` always moves on:
 
-* **Barcode** — click the barcode box and scan; the app checks at once that
-  the barcode is not used by another product. A scanner's Enter just moves to
-  the next box, so it never saves the form by accident.
-* **Sold by (unit)** — `Pieces` for packed goods; `kg`, `g`, `L`, `ml`, `m`
-  … for goods sold by weight or measure. The selling price is per that unit
-  (e.g. Rs 500 per kg).
-* **Opening stock** is recorded as a stock movement. After that, stock only
-  changes through sales, returns, purchases and **Adjust stock** — never by
-  editing the product — so every change has a date and a reason.
-* **Variations** — tick *This product comes in variations* to give one product
-  several sizes/colours/packs, each with its own barcode, SKU, cost, price and
-  stock. *Add S / M / L / XL* fills the usual sizes.
-* Products with history cannot be deleted; **Archive** hides them from the
-  till but keeps reports correct. Archived products can be restored.
+1. What is it called?
+2. How do you sell it? — *by the piece*, *by weight* (price per kg),
+   *by volume* (per litre) or *by length* (per metre). Other units such as
+   dozen or gram are under *Use a different unit*.
+3. Does it come in different sizes or types? If yes, tap suggestions such as
+   Small / Medium / Large (or type your own); each size gets its own price,
+   barcode and stock.
+4. Scan the barcode — the app tells you straight away if it is already used.
+   No barcode? Press *It has no barcode*.
+5. What do you sell it for?
+6. What did you pay for it? (optional — it is only used to show your profit)
+7. How many do you have right now?
+8. Which category is it in? (optional)
+
+Finally a summary shows every answer with a **Change** link. *Show more
+details* there holds the rarely needed extras: low-stock warning, item code
+(SKU), description, supplier, picture and pack size. **Save product**, or
+**Save and add another**.
+
+Click a product in **Inventory** to see its stock, price, profit, a chart of
+what sold in the last 30 days and its latest stock changes.
+
+* **Change stock** — for anything that isn't a sale or a purchase: new stock
+  that arrived without a bill, damaged or expired items, lost items, items
+  used in the shop, items sent back, or *I counted it* to set the exact
+  number. Every change is kept in **Stock history** with its reason.
+* **Edit** opens the same summary; change only what you need.
+* Products with history cannot be deleted; **More › Hide from the Sales
+  screen** hides them but keeps reports correct. Show them again any time
+  from the *Hidden* filter.
 
 ## 3. Selling (Sales tab)
 
 * **Scan** a barcode at any time — you do not need to click the search box
   first. Scanning the same item again adds one more.
-* Or type part of a name/barcode, then click a product (or `↓` then `Enter`).
-* Products with variations ask which one; weighed products ask for the
+* Or type part of a name, barcode or category, then tap a product in the list
+  (or `↓` then `Enter`). The category buttons above the list narrow it down.
+* Products with sizes ask which one; products sold by weight ask for the
   weight. Type it in **g** (or kg) — the price is calculated automatically
   (250 g at Rs 500/kg = Rs 125) — or type the money amount and the weight is
   worked out for you.
-* Unknown barcode? The app offers to **register a new product** with it and
-  then adds it to the bill.
-* Change a line: select it and use `+` / `−`, or `F2` to edit quantity,
-  price or a line discount; `Delete` removes it.
-* **Bill discount**: amount, or press `%` for a percentage.
-* **Customer** (`F4`): leave as *Walk-in Customer* for normal cash sales, or
-  pick/create a customer. If the customer pays less than the total, the rest
-  is added to their account (walk-in customers must pay in full).
-* **Payment**: choose the method, type the amount received (`F10`) — or leave
-  it empty for the exact amount — and the change is shown.
-* **Complete Sale** — `F12` (or `Enter` in the amount box). Stock, payment,
+* Unknown barcode? The app offers to **add it as a new product** (the
+  barcode is already filled in) and then puts it on the bill.
+* Each line on the bill has its own **−** / **+** and **×** buttons;
+  double-click a line (or `F2`) to change its quantity, price or discount.
+* **Add discount** gives money off the whole bill, as an amount or a %.
+* **Customer** (`F4`): leave it as *Walk-in customer* for normal cash sales,
+  or choose / add a customer. If a customer pays less than the total, the
+  rest is added to their account (walk-in customers must pay in full).
+* **Payment**: tap how the customer pays (Cash, Card, …), then type the cash
+  received (`F10`) or tap one of the round amounts — or leave it empty for
+  the exact amount. *Give back Rs …* shows the change.
+* **Complete sale** — `F12` (or `Enter` in the amount box). Stock, payment,
   customer balance and receipt are saved together in one step; a sale can
   never be saved twice.
-* **Hold** (`F8`) parks the bill to serve another customer; **Held** (`F9`)
-  brings it back. `Ctrl+Delete` clears the bill, `Esc` clears the search.
+* **Hold bill** (`F8`) parks the bill to serve someone else; **Held bills**
+  (`F9`) brings it back. **Shortcuts** at the top lists every key.
 
 ## 4. Receipts, reprints and returns
 
-**Receipts** lists every sale with filters for number, customer, date,
-payment method and status. Select one to preview it, then **Print**,
-**Save PDF** or **Return items**.
+**Receipts** lists every sale; search by receipt number, customer or phone
+and choose the period. Select one to see it exactly as it prints, then
+**Print**, **Save as PDF** or **Take items back**.
 
 Returns put the stock back and record the refund: cash back, or for account
 customers optionally taken off what they owe. The original sale is never
 changed — it is marked *Partly returned* / *Returned* and the return has its
 own number (`RET-…`).
 
-## 5. Suppliers and purchases
+## 5. Customers, suppliers and purchases
 
-**Suppliers › New purchase**: choose the supplier (or *No supplier* for a
-cash purchase), scan/search products, enter quantity and cost, an optional
-bill discount and how much you paid now. Stock goes up, the product's cost
-price becomes the moving average, and any unpaid part is added to the
-supplier's balance. A purchase entered by mistake can be **reversed** from
-its details (stock and balance are corrected, the purchase stays in history).
+**Customers** and **Suppliers** list everyone with what they owe (or what you
+owe them). Click a name to see the balance, totals, a chart of what was
+bought each month and the latest receipts or purchases. **Receive payment**
+/ **Pay** records money; *More* has the full account history, *Correct the
+balance* and *Hide*. A new customer or supplier only needs a name — phone,
+address and an old balance are under *Add more details*.
 
-## 6. Ledgers, payments and expenses
+**Suppliers › New purchase**: choose who you bought from (or *Somewhere
+else*), scan or search the products and enter quantity and cost, then tap
+**Paid in full**, **Paid part of it** or **Not paid yet**. Stock goes up, the
+product's cost becomes the moving average, and any unpaid part is added to
+the supplier's balance. Bill number, discount and a note are under *Add bill
+number, discount or note*. A purchase entered by mistake can be
+**cancelled** from its details (stock and balance are corrected, the purchase
+stays in history).
 
-* **Ledgers › Customer / Supplier ledger**: every charge, payment, return and
-  adjustment with a running balance, for any period, with opening and closing
-  balance. **Receive payment / Pay supplier** records money; **Adjust
-  balance** corrects a balance with a reason. Export as PDF/Excel or print.
+## 6. Ledgers and expenses
+
+* **Ledgers › Customer / Supplier accounts**: every sale, purchase, payment,
+  return and correction with a running balance and a chart of the balance
+  over time, for any period. Export as PDF/Excel or print.
 * Payments recorded by mistake are **reversed**, never deleted.
-* **Ledgers › Expenses**: rent, electricity, salaries… These feed net profit.
-  A wrong expense is **voided** (it stays visible).
+* **Ledgers › Shop expenses**: tap what the money was for (rent,
+  electricity, salaries…) and type the amount — today's date and your usual
+  way of paying are filled in. A chart shows where the money went. Expenses
+  reduce net profit in reports. A wrong expense is **cancelled** (it stays
+  visible, marked as cancelled).
 
 ## 7. Backups and restore
 
@@ -124,10 +155,11 @@ latest backup file.
 1. Install the printer's Windows driver and make sure Windows can print a
    test page.
 2. *Tools & Settings › Printer*: pick the printer (or keep *Windows default
-   printer*), choose **80 mm** or **58 mm** (or *Custom* for other widths such
-   as 48 mm paper), and check *Printable width* (80 mm paper → 72 mm,
-   58 mm → 48 mm).
-3. *How to print*:
+   printer*) and choose **80 mm** or **58 mm** paper. Everything below is
+   under *Show advanced printer settings* and rarely needs changing:
+   *Custom* paper widths (such as 48 mm paper) and *Printable width*
+   (80 mm paper → 72 mm, 58 mm → 48 mm).
+3. *How to print* (advanced):
    * **Windows printer driver (recommended)** — works with almost every
      printer; adjust *Text size* if text is too small/large.
    * **Raw ESC/POS text** — for printers that accept raw ESC/POS. Set
@@ -151,13 +183,15 @@ no user accounts.
 
 | Key | Action |
 |---|---|
-| `F1` | Focus the scan/search box |
-| `F2` | Edit the selected line |
-| `F4` | Choose customer |
-| `F8` / `F9` | Hold sale / Held sales |
-| `F10` | Amount received |
+| `F1` | Go to the search box |
+| `↓` then `Enter` | Add the highlighted product |
+| `F2` | Change quantity, price or discount of the item |
+| `F4` | Choose the customer |
+| `F8` / `F9` | Hold this bill / bring back a held bill |
+| `F10` | Type the cash received |
 | `F12` | Complete sale |
-| `+` / `−` (numpad) | Change quantity of the selected line |
-| `Delete` | Remove selected line |
+| `+` / `−` (number pad) | One more / one less of the last item |
 | `Ctrl+Delete` | Clear the bill |
+| `Esc` | Clear the search |
 | `Ctrl+1 … Ctrl+9` | Switch tabs |
+| `Ctrl+N` (Inventory) | Add a product |
