@@ -6,9 +6,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A tiny, dependency-free JSON reader/writer - just enough for talking to the
- * cloud API. We avoid adding a JSON library so the app keeps its single
- * dependency (the SQLite driver).
+ * A tiny, dependency-free JSON reader/writer - used for saving held sales and
+ * small structured values. We avoid adding a JSON library to keep the
+ * application light.
  *
  * <ul>
  *   <li>{@link #parse(String)} returns nested {@code Map<String,Object>},

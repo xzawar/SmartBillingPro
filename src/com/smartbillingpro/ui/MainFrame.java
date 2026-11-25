@@ -1,356 +1,436 @@
 package com.smartbillingpro.ui;
 
-import com.smartbillingpro.model.Role;
-import com.smartbillingpro.model.User;
-import com.smartbillingpro.service.AppContext;
-import com.smartbillingpro.ui.components.GradientPanel;
-import com.smartbillingpro.ui.components.NavIcons;
-import com.smartbillingpro.ui.components.RoundedButton;
-import com.smartbillingpro.ui.components.SidebarButton;
-import com.smartbillingpro.ui.panels.BillingPanel;
-import com.smartbillingpro.ui.panels.CustomerPanel;
-import com.smartbillingpro.ui.panels.DashboardPanel;
-import com.smartbillingpro.ui.panels.HistoryPanel;
-import com.smartbillingpro.ui.panels.InventoryPanel;
-import com.smartbillingpro.ui.panels.PurchasePanel;
-import com.smartbillingpro.ui.panels.ReportPanel;
-import com.smartbillingpro.ui.panels.SettingsPanel;
-import com.smartbillingpro.ui.panels.StaffPanel;
-import com.smartbillingpro.ui.panels.SupplierPanel;
-import com.smartbillingpro.ui.theme.Theme;
-import com.smartbillingpro.util.CloudSync;
-import com.smartbillingpro.util.LiveSync;
-import com.smartbillingpro.util.RememberMe;
+import com.smartbillingpro.app.AppContext;
+import com.smartbillingpro.app.AppPaths;
+import com.smartbillingpro.ui.pages.CustomersPage;
+import com.smartbillingpro.ui.pages.DashboardPage;
+import com.smartbillingpro.ui.pages.InventoryPage;
+import com.smartbillingpro.ui.pages.LedgersPage;
+import com.smartbillingpro.ui.pages.PosPage;
+import com.smartbillingpro.ui.pages.ReceiptsPage;
+import com.smartbillingpro.ui.pages.ReportsPage;
+import com.smartbillingpro.ui.pages.SettingsPage;
+import com.smartbillingpro.ui.pages.SuppliersPage;
+import com.smartbillingpro.util.Dates;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** The main window: top bar, sidebar navigation and the swappable content area. */
-public class MainFrame extends JFrame {
+/** The single application window: sidebar navigation and one page at a time. */
+public final class MainFrame extends JFrame {
 
-    private final AppContext context;
-    private final CardLayout cardLayout = new CardLayout();
-    private final JPanel content = new JPanel(cardLayout);
+    public static final String DASHBOARD = "dashboard";
+    public static final String SALES = "sales";
+    public static final String INVENTORY = "inventory";
+    public static final String SUPPLIERS = "suppliers";
+    public static final String LEDGERS = "ledgers";
+    public static final String CUSTOMERS = "customers";
+    public static final String RECEIPTS = "receipts";
+    public static final String REPORTS = "reports";
+    public static final String SETTINGS = "settings";
+
+    private static final String[][] NAV = {
+        {DASHBOARD, "Dashboard", "dashboard"},
+        {SALES, "Sales", "sales"},
+        {INVENTORY, "Inventory", "inventory"},
+        {SUPPLIERS, "Suppliers", "suppliers"},
+        {LEDGERS, "Ledgers", "ledgers"},
+        {CUSTOMERS, "Customers", "customers"},
+        {RECEIPTS, "Receipts", "receipts"},
+        {REPORTS, "Reports", "reports"},
+        {SETTINGS, "Tools & Settings", "settings"},
+    };
+
+    private final AppContext ctx;
+    private final Runnable onExit;
+    private final CardLayout cards = new CardLayout();
+    private final JPanel content = new JPanel(cards);
+    private final Map<String, Page> pages = new LinkedHashMap<>();
+    private final Map<String, NavButton> navButtons = new LinkedHashMap<>();
+    private final JLabel storeName = new JLabel();
+    private final JLabel clock = Ui.muted("");
+    private final JLabel backupChip = Ui.pill("", Ui.Tone.NEUTRAL);
     private final JPanel sidebar = new JPanel();
-    private final Map<String, SidebarButton> navButtons = new LinkedHashMap<>();
-    private final LiveSync liveSync;
-    private String currentKey;
-    private JPanel activationBanner;
-    private boolean forcePending;
+    private String current;
+    private boolean compact;
 
-    public MainFrame(AppContext context) {
-        this(context, false);
-    }
-
-    /**
-     * @param pending when true the window opens fully locked (only the dashboard
-     *                preview is usable) with the "waiting for activation" banner.
-     *                Used right after a new store is created from the login screen.
-     */
-    public MainFrame(AppContext context, boolean pending) {
-        this.context = context;
-        this.forcePending = pending;
-        setTitle("Smart Billing Pro");
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(1240, 760);
-        setMinimumSize(new Dimension(1080, 660));
+    public MainFrame(AppContext ctx, Runnable onExit) {
+        super(AppPaths.APP_NAME);
+        this.ctx = ctx;
+        this.onExit = onExit;
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        setIconImages(AppIcon.images());
+        setMinimumSize(new Dimension(980, 640));
+        java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        setSize(Math.min(1366, screen.width), Math.min(820, screen.height));
         setLocationRelativeTo(null);
+        setExtendedState(MAXIMIZED_BOTH);
 
         JPanel root = new JPanel(new BorderLayout());
-        JPanel north = new JPanel(new BorderLayout());
-        north.add(buildTopBar(), BorderLayout.NORTH);
-        activationBanner = buildActivationBanner();
-        activationBanner.setVisible(storePending());
-        north.add(activationBanner, BorderLayout.SOUTH);
-        root.add(north, BorderLayout.NORTH);
         root.add(buildSidebar(), BorderLayout.WEST);
+        JPanel main = new JPanel(new BorderLayout());
+        main.add(buildTopBar(), BorderLayout.NORTH);
         content.setBackground(Theme.BG);
-        content.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
-        root.add(content, BorderLayout.CENTER);
+        main.add(content, BorderLayout.CENTER);
+        root.add(main, BorderLayout.CENTER);
         setContentPane(root);
+        buildPages();
 
-        registerPanels();
-        navigateTo("dashboard");
-        // Lock the whole app if this store is still waiting for activation.
-        setLocked(storePending());
-
-        // Keep every open window in sync in near real time: watch the shared
-        // database on a background thread and refresh the visible screen
-        // whenever anything changes (here or in another app/counter).
-        liveSync = new LiveSync(context.getDatabaseFile(), this::refreshCurrent);
-        liveSync.start();
-    }
-
-    private JComponent buildTopBar() {
-        GradientPanel bar = new GradientPanel(new BorderLayout());
-        bar.setColors(Theme.PRIMARY, Theme.ACCENT);
-        bar.setPreferredSize(new Dimension(0, 64));
-        bar.setBorder(BorderFactory.createEmptyBorder(0, 22, 0, 22));
-
-        // Show the shop's own name (from its settings) so each store sees its brand.
-        String storeName = context.getSettings().getBusinessName();
-        if (storeName == null || storeName.isBlank()) {
-            storeName = "Smart Billing Pro";
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                requestExit();
+            }
+        });
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                setCompact(getWidth() < 1180);
+            }
+        });
+        for (int i = 0; i < NAV.length; i++) {
+            final String key = NAV[i][0];
+            Ui.key(root, "ctrl " + (i + 1), () -> show(key));
         }
-        JLabel brand = new JLabel("\uD83D\uDED2  " + storeName);
-        brand.setFont(Theme.bold(20));
-        brand.setForeground(Color.WHITE);
-        bar.add(brand, BorderLayout.WEST);
-
-        JPanel right = new JPanel();
-        right.setOpaque(false);
-        right.setLayout(new BoxLayout(right, BoxLayout.X_AXIS));
-
-        User user = context.getCurrentUser();
-        JLabel who = new JLabel(user.getDisplayName() + "  \u2022  " + user.getRole().getLabel());
-        who.setFont(Theme.bold(13));
-        who.setForeground(Color.WHITE);
-
-        RoundedButton logout = new RoundedButton("Logout", Theme.withAlpha(Color.WHITE, 40), Color.WHITE);
-        logout.addActionListener(e -> logout());
-
-        right.add(who);
-        right.add(Box.createHorizontalStrut(16));
-        right.add(logout);
-        bar.add(right, BorderLayout.EAST);
-        return bar;
+        Timer t = new Timer(20_000, e -> tick());
+        t.start();
+        tick();
+        updateBackupStatus();
+        show(SALES);
     }
 
-    private JComponent buildSidebar() {
-        sidebar.setBackground(Theme.SIDEBAR);
+    public AppContext context() {
+        return ctx;
+    }
+
+    private void setStoreName(String name) {
+        String safe = name == null ? "" : name.replace("&", "&amp;").replace("<", "&lt;");
+        storeName.setText("<html><div style='width:150px'>" + safe + "</div></html>");
+        storeName.setToolTipText(name);
+    }
+
+    private void buildPages() {
+        for (Page p : pages.values()) {
+            content.remove(p);
+        }
+        pages.clear();
+        pages.put(DASHBOARD, new DashboardPage(this));
+        pages.put(SALES, new PosPage(this));
+        pages.put(INVENTORY, new InventoryPage(this));
+        pages.put(SUPPLIERS, new SuppliersPage(this));
+        pages.put(LEDGERS, new LedgersPage(this));
+        pages.put(CUSTOMERS, new CustomersPage(this));
+        pages.put(RECEIPTS, new ReceiptsPage(this));
+        pages.put(REPORTS, new ReportsPage(this));
+        pages.put(SETTINGS, new SettingsPage(this));
+        pages.forEach((k, p) -> content.add(p, k));
+        setStoreName(ctx.settings().get().storeName());
+    }
+
+    /** Rebuild every screen (after a restore or a settings change that affects formatting). */
+    public void reloadAll(String showKey) {
+        buildPages();
+        setStoreName(ctx.settings().get().storeName());
+        current = null;
+        show(showKey);
+        updateBackupStatus();
+    }
+
+    public void show(String key) {
+        Page target = pages.get(key);
+        if (target == null) {
+            return;
+        }
+        if (current != null && !current.equals(key) && !pages.get(current).canLeave()) {
+            return;
+        }
+        current = key;
+        cards.show(content, key);
+        navButtons.forEach((k, b) -> b.setActive(k.equals(key)));
+        try {
+            target.refresh();
+        } catch (RuntimeException e) {
+            Msg.error(this, e);
+        }
+        javax.swing.SwingUtilities.invokeLater(target::focusDefault);
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T extends Page> T page(String key) {
+        return (T) pages.get(key);
+    }
+
+    public void storeNameChanged() {
+        setStoreName(ctx.settings().get().storeName());
+    }
+
+    // ------------------------------------------------------------ sidebar
+
+    private Component buildSidebar() {
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
+        sidebar.setBackground(Theme.NAV);
+        sidebar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, Theme.BORDER),
+                BorderFactory.createEmptyBorder(18, 12, 14, 12)));
+        JPanel brand = new JPanel(new BorderLayout(10, 0));
+        brand.setOpaque(false);
+        brand.setAlignmentX(Component.LEFT_ALIGNMENT);
+        brand.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
+        JLabel logo = new JLabel(AppIcon.icon(34));
+        brand.add(logo, BorderLayout.WEST);
+        storeName.setFont(Theme.bold(15));
+        storeName.setForeground(Theme.TEXT);
+        JLabel app = new JLabel("Smart Billing Pro");
+        app.setFont(Theme.font(12));
+        app.setForeground(Theme.MUTED);
+        JPanel names = new JPanel(new BorderLayout());
+        names.setOpaque(false);
+        names.add(storeName, BorderLayout.NORTH);
+        names.add(app, BorderLayout.SOUTH);
+        brand.add(names, BorderLayout.CENTER);
+        brand.putClientProperty("names", names);
+        sidebar.add(brand);
+        sidebar.add(Box.createVerticalStrut(22));
+        for (int i = 0; i < NAV.length; i++) {
+            String[] n = NAV[i];
+            NavButton b = new NavButton(n[1], n[2], "Ctrl+" + (i + 1));
+            b.addActionListener(e -> show(n[0]));
+            navButtons.put(n[0], b);
+            sidebar.add(b);
+            sidebar.add(Box.createVerticalStrut(2));
+        }
+        sidebar.add(Box.createVerticalGlue());
+        JLabel version = new JLabel("Offline • v" + AppPaths.VERSION);
+        version.setFont(Theme.font(12));
+        version.setForeground(Theme.MUTED);
+        version.setAlignmentX(Component.LEFT_ALIGNMENT);
+        version.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
+        sidebar.add(version);
         sidebar.setPreferredSize(new Dimension(232, 0));
-        sidebar.setBorder(BorderFactory.createEmptyBorder(16, 0, 16, 0));
         return sidebar;
     }
 
-    private void registerPanels() {
-        Role role = context.getCurrentUser().getRole();
-
-        addNav("dashboard", "dashboard", "Dashboard", new DashboardPanel(this, context));
-        // Only managers and cashiers operate the till. Owners monitor data instead.
-        if (role.canSell()) {
-            addNav("billing", "billing", "New Sale", new BillingPanel(this, context));
-        }
-        addNav("inventory", "inventory", "Inventory", new InventoryPanel(this, context));
-        addNav("customers", "customers", "Customers", new CustomerPanel(this, context));
-        if (role.canManageSuppliers()) {
-            addNav("suppliers", "suppliers", "Suppliers", new SupplierPanel(this, context));
-        }
-        if (role.canManageInventory()) {
-            addNav("purchases", "purchases", "Purchases", new PurchasePanel(this, context));
-        }
-        // The store owner manages their own managers and cashiers here.
-        if (role.canManageStaff()) {
-            addNav("staff", "staff", "Staff", new StaffPanel(this, context));
-        }
-        addNav("history", "history", "Sales History", new HistoryPanel(this, context));
-        if (role.canViewReports()) {
-            addNav("reports", "reports", "Reports", new ReportPanel(this, context));
-        }
-        if (role.canManageSettings()) {
-            addNav("settings", "settings", "Settings", new SettingsPanel(this, context));
-        }
-
-        sidebar.add(Box.createVerticalGlue());
-        JLabel version = new JLabel("v3.1");
-        version.setFont(Theme.regular(11));
-        version.setForeground(Theme.SIDEBAR_TEXT);
-        version.setAlignmentX(Component.LEFT_ALIGNMENT);
-        version.setBorder(BorderFactory.createEmptyBorder(8, 26, 0, 0));
-        sidebar.add(version);
-    }
-
-    private void addNav(String key, String iconName, String label, JComponent panel) {
-        content.add(panel, key);
-        SidebarButton button = new SidebarButton(label);
-        button.setIcons(NavIcons.get(iconName, 18, Theme.SIDEBAR_TEXT),
-                NavIcons.get(iconName, 18, Color.WHITE));
-        button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
-        button.setAlignmentX(Component.LEFT_ALIGNMENT);
-        button.addActionListener(e -> navigateTo(key));
-        sidebar.add(button);
-        navButtons.put(key, button);
-    }
-
-    /** Switches the visible panel and refreshes it if needed. */
-    public void navigateTo(String key) {
-        if (!navButtons.containsKey(key)) {
+    private void setCompact(boolean c) {
+        if (c == compact) {
             return;
         }
-        currentKey = key;
-        cardLayout.show(content, key);
-        for (Map.Entry<String, SidebarButton> entry : navButtons.entrySet()) {
-            entry.getValue().setActive(entry.getKey().equals(key));
-        }
-        Component[] components = content.getComponents();
-        for (Component component : components) {
-            if (component.isVisible() && component instanceof Refreshable) {
-                ((Refreshable) component).refreshData();
+        compact = c;
+        sidebar.setPreferredSize(new Dimension(c ? 70 : 232, 0));
+        for (Component comp : sidebar.getComponents()) {
+            if (comp instanceof JPanel p && p.getClientProperty("names") instanceof JPanel names) {
+                names.setVisible(!c);
+            }
+            if (comp instanceof JLabel l) {
+                l.setVisible(!c);
             }
         }
+        navButtons.values().forEach(b -> b.setCompact(c));
+        sidebar.revalidate();
+        sidebar.repaint();
     }
 
-    /** Re-runs refresh on the panel that is currently visible. */
-    public void refreshCurrent() {
-        // Lock or unlock the whole app depending on whether the store has been
-        // activated yet. This makes the screen switch from "waiting for
-        // activation" to fully usable the instant an admin approves it online.
-        setLocked(storePending());
-        if (currentKey != null) {
-            navigateTo(currentKey);
+    /** Sidebar item with icon, label and active indicator. */
+    private static final class NavButton extends JButton {
+        private final String label;
+        private final String icon;
+        private boolean active;
+
+        NavButton(String label, String icon, String shortcut) {
+            super(label);
+            this.label = label;
+            this.icon = icon;
+            setToolTipText(label + "  (" + shortcut + ")");
+            setHorizontalAlignment(SwingConstants.LEFT);
+            setFont(Theme.font(14));
+            setForeground(Theme.NAV_TEXT);
+            setIcon(Icons.get(icon, 20, Theme.NAV_TEXT));
+            setIconTextGap(12);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setBorder(BorderFactory.createEmptyBorder(11, 14, 11, 10));
+            setAlignmentX(Component.LEFT_ALIGNMENT);
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+            getModel().addChangeListener(e -> repaint());
         }
-    }
 
-    /** A warning strip telling the owner the store is waiting for activation. */
-    private JPanel buildActivationBanner() {
-        JPanel banner = new JPanel(new BorderLayout());
-        banner.setBackground(Theme.WARNING);
-        banner.setBorder(BorderFactory.createEmptyBorder(10, 22, 10, 22));
-        JLabel msg = new JLabel("\u23F3  Waiting for administrator activation \u2014 "
-                + "your store is locked until an administrator activates it from the web console.");
-        msg.setFont(Theme.bold(13));
-        msg.setForeground(Color.WHITE);
-        banner.add(msg, BorderLayout.WEST);
-        return banner;
-    }
+        void setActive(boolean a) {
+            active = a;
+            Color c = a ? Theme.NAV_TEXT_ACTIVE : Theme.NAV_TEXT;
+            setForeground(c);
+            setFont(a ? Theme.bold(14) : Theme.font(14));
+            setIcon(Icons.get(icon, 20, c));
+            getAccessibleContext().setAccessibleDescription(a ? "current page" : null);
+            repaint();
+        }
 
-    /** True when the signed-in user's store has not been activated yet. */
-    private boolean storePending() {
-        try {
-            int storeId = context.getCurrentStoreId();
-            com.smartbillingpro.model.Store store = storeId > 0
-                    ? context.getStoreService().findById(storeId) : null;
-            if (store != null) {
-                // Once the store exists locally, trust its activation flag: the
-                // background sync flips it to active when an admin approves it.
-                if (store.isActive()) {
-                    forcePending = false;
-                    return false;
-                }
-                return true;
+        void setCompact(boolean c) {
+            setText(c ? "" : label);
+            setHorizontalAlignment(c ? SwingConstants.CENTER : SwingConstants.LEFT);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            if (active) {
+                g2.setColor(Theme.NAV_ACTIVE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+            } else if (getModel().isRollover()) {
+                g2.setColor(Theme.NAV_HOVER);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
             }
-            // Not downloaded yet (registration still running in the background):
-            // stay locked if we were opened straight from the create-store flow.
-            return forcePending;
-        } catch (RuntimeException e) {
-            return forcePending;
+            g2.dispose();
+            super.paintComponent(g);
         }
     }
 
-    /**
-     * Locks or unlocks the whole app. While a brand-new store waits for admin
-     * activation the owner can preview the dashboard, but every other screen is
-     * disabled. The moment the store is activated online this runs again and
-     * turns everything back on - without ever leaving the screen.
-     */
-    private void setLocked(boolean locked) {
-        if (activationBanner != null) {
-            activationBanner.setVisible(locked);
-        }
-        for (Map.Entry<String, SidebarButton> entry : navButtons.entrySet()) {
-            // Keep the Dashboard reachable as a read-only preview; lock the rest.
-            entry.getValue().setEnabled(!locked || entry.getKey().equals("dashboard"));
-        }
-        if (locked) {
-            // A locked store can only sit on the dashboard preview.
-            currentKey = "dashboard";
-            cardLayout.show(content, "dashboard");
-            for (Map.Entry<String, SidebarButton> entry : navButtons.entrySet()) {
-                entry.getValue().setActive(entry.getKey().equals("dashboard"));
+    // ------------------------------------------------------------ top bar
+
+    private Component buildTopBar() {
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(Theme.SURFACE);
+        bar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER),
+                BorderFactory.createEmptyBorder(10, 26, 10, 20)));
+        clock.setFont(Theme.font(13));
+        clock.setForeground(Theme.TEXT_2);
+        bar.add(clock, BorderLayout.WEST);
+        backupChip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        backupChip.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                show(SETTINGS);
+                SettingsPage sp = page(SETTINGS);
+                sp.showBackupTab();
+            }
+        });
+        JButton lock = Ui.icon("lock", "Lock the screen");
+        lock.addActionListener(e -> lockScreen());
+        lock.setVisible(ctx.settings().get().pinEnabled());
+        bar.putClientProperty("lock", lock);
+        bar.add(Ui.flowRight(12, backupChip, lock, ownerChip()), BorderLayout.EAST);
+        return bar;
+    }
+
+    /** Avatar with the shop's initials - there is one owner and no login. */
+    private JComponent ownerChip() {
+        JLabel avatar = new JLabel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g2.setColor(Theme.ACCENT_INK);
+                g2.fillOval(0, 0, 34, 34);
+                g2.setColor(Theme.ACCENT);
+                g2.setFont(Theme.bold(13));
+                String in = initials(ctx.settings().get().storeName());
+                java.awt.FontMetrics fm = g2.getFontMetrics();
+                g2.drawString(in, (34 - fm.stringWidth(in)) / 2, 17 + fm.getAscent() / 2 - 2);
+                g2.dispose();
+            }
+        };
+        avatar.setPreferredSize(new Dimension(34, 34));
+        JLabel name = new JLabel("Owner");
+        name.setFont(Theme.bold(13));
+        JLabel role = Ui.muted("Offline \u2022 this PC");
+        role.setFont(Theme.font(11));
+        JPanel text = new JPanel(new BorderLayout());
+        text.setOpaque(false);
+        text.add(name, BorderLayout.NORTH);
+        text.add(role, BorderLayout.SOUTH);
+        JPanel chip = new JPanel(new BorderLayout(8, 0));
+        chip.setOpaque(false);
+        chip.add(avatar, BorderLayout.WEST);
+        chip.add(text, BorderLayout.CENTER);
+        return chip;
+    }
+
+    private static String initials(String name) {
+        StringBuilder sb = new StringBuilder();
+        for (String w : (name == null ? "" : name).trim().split("\\s+")) {
+            if (!w.isEmpty() && Character.isLetterOrDigit(w.charAt(0)) && sb.length() < 2) {
+                sb.append(Character.toUpperCase(w.charAt(0)));
             }
         }
+        return sb.length() == 0 ? "SB" : sb.toString();
     }
 
-    /**
-     * Called on the UI thread once the background cloud registration succeeds.
-     * The real saved owner account is now signed in, so start the background
-     * sync (which unlocks the store the instant an admin activates it) and
-     * refresh the screen.
-     */
-    public void onStoreRegistered() {
-        context.startCloudSync();
-        refreshCurrent();
+    private void tick() {
+        LocalDateTime now = LocalDateTime.now();
+        clock.setText(now.getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)
+                + ", " + Dates.formatDate(now.toLocalDate()) + "   " + Dates.formatTime(now));
     }
 
-    /** Called on the UI thread if the background cloud registration fails. */
-    public void onStoreRegistrationFailed(String error) {
-        JOptionPane.showMessageDialog(this,
-                "Your store could not be registered online:\n"
-                        + (error == null ? "Please check your internet connection." : error)
-                        + "\n\nPlease sign in and try again.",
-                "Create store", JOptionPane.WARNING_MESSAGE);
-        if (liveSync != null) {
-            liveSync.stop();
+    /** Refresh the backup indicator (safe to call from any thread). */
+    public void updateBackupStatus() {
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            String last = ctx.backups().lastBackupTime();
+            String status = ctx.backups().lastStatus();
+            LocalDate lastDate = last.isBlank() ? null : Dates.dateOf(last);
+            if ("FAILED".equals(status)) {
+                backupChip.setText("⚠ Backup failed – click to fix");
+                Ui.setTone(backupChip, Ui.Tone.BAD);
+            } else if (lastDate == null) {
+                backupChip.setText("No backup yet");
+                Ui.setTone(backupChip, Ui.Tone.WARN);
+            } else if (lastDate.equals(LocalDate.now())) {
+                backupChip.setText("✓ Backed up today " + Dates.formatTime(Dates.parse(last)));
+                Ui.setTone(backupChip, Ui.Tone.GOOD);
+            } else {
+                backupChip.setText("Last backup " + Dates.formatDate(lastDate));
+                Ui.setTone(backupChip, Ui.Tone.WARN);
+            }
+            backupChip.setToolTipText(ctx.backups().lastError().isBlank() ? "Backups are saved in "
+                    + ctx.backups().backupDir() : ctx.backups().lastError());
+        });
+    }
+
+    public void pinChanged() {
+        Component top = ((BorderLayout) ((JPanel) content.getParent()).getLayout()).getLayoutComponent(BorderLayout.NORTH);
+        if (top instanceof JPanel p && p.getClientProperty("lock") instanceof JButton lock) {
+            lock.setVisible(ctx.settings().get().pinEnabled());
         }
-        dispose();
-        new LoginFrame(context).setVisible(true);
     }
 
-    private void logout() {
-        int choice = JOptionPane.showConfirmDialog(this, "Log out of Smart Billing Pro?",
-                "Confirm Logout", JOptionPane.YES_NO_OPTION);
-        if (choice != JOptionPane.YES_OPTION) {
-            return;
-        }
-        // Offer to back this store's data up to the cloud on the way out.
-        maybeCloudSyncOnLogout();
-        liveSync.stop();
-        // "Remember me" only lasts until an explicit logout.
-        RememberMe.clear();
-        context.getAuditService().log("LOGOUT", "Signed out");
-        context.setCurrentUser(null);
-        context.getBillingService().clear();
-        dispose();
-        LoginFrame login = new LoginFrame(context);
-        login.setVisible(true);
+    private void lockScreen() {
+        PinDialog.unlock(this, ctx, true);
     }
 
-    /**
-     * When cloud sync is configured, upload this store's database on logout. If
-     * the device is online the upload runs automatically; if not, the user is
-     * offered the choice to try anyway. When cloud sync is not configured this
-     * does nothing, so the app keeps working fully offline.
-     */
-    private void maybeCloudSyncOnLogout() {
-        if (!CloudSync.isConfigured()) {
-            return;
-        }
-        int storeId = context.getCurrentStoreId();
-        java.io.File db = context.getDatabaseFile();
-        boolean online = CloudSync.isOnline();
-        if (!online) {
-            int up = JOptionPane.showConfirmDialog(this,
-                    "No internet connection was detected.\n"
-                            + "Try uploading this store's data to the cloud anyway?",
-                    "Cloud Sync", JOptionPane.YES_NO_OPTION);
-            if (up != JOptionPane.YES_OPTION) {
+    // ------------------------------------------------------------ exit
+
+    private void requestExit() {
+        for (Page p : pages.values()) {
+            if (!p.canExit()) {
                 return;
             }
         }
-        try {
-            String msg = CloudSync.upload(db, storeId);
-            JOptionPane.showMessageDialog(this, msg, "Cloud Sync", JOptionPane.INFORMATION_MESSAGE);
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Could not upload to the cloud:\n" + ex.getMessage(),
-                    "Cloud Sync", JOptionPane.WARNING_MESSAGE);
-        }
-    }
-
-    public AppContext getContext() {
-        return context;
+        onExit.run();
     }
 }
