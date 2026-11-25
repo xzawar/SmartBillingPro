@@ -48,6 +48,10 @@ public final class Msg {
         show(parent, "That didn't work", text, Ui.Tone.BAD, null, "OK", null, false, null);
     }
 
+    public static void error(Component parent, String title, String text) {
+        show(parent, title, text, Ui.Tone.BAD, null, "OK", null, false, null);
+    }
+
     public static void info(Component parent, String title, String text) {
         show(parent, title, text, Ui.Tone.INFO, null, "OK", null, false, null);
     }

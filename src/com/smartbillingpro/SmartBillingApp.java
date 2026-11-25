@@ -3,6 +3,7 @@ package com.smartbillingpro;
 import com.smartbillingpro.app.AppConfig;
 import com.smartbillingpro.app.AppContext;
 import com.smartbillingpro.app.AppPaths;
+import com.smartbillingpro.app.DeviceLock;
 import com.smartbillingpro.app.InstanceLock;
 import com.smartbillingpro.service.LegacyImportService;
 import com.smartbillingpro.ui.MainFrame;
@@ -31,6 +32,17 @@ public final class SmartBillingApp {
     }
 
     public static void main(String[] args) {
+        if (args.length > 0 && "--bind-device".equals(args[0])) {
+            // run once by the installer: register this computer (see DeviceLock)
+            System.exit(DeviceLock.bind(args.length > 1 ? args[1] : null));
+            return;
+        }
+        if (args.length > 0 && "--check-device".equals(args[0])) {
+            DeviceLock.State state = DeviceLock.check();
+            System.out.println(state);
+            System.exit(state == DeviceLock.State.OK || state == DeviceLock.State.NOT_LOCKED ? 0 : 2);
+            return;
+        }
         System.setProperty("sun.java2d.uiScale.enabled", "true");
         AppPaths paths = AppPaths.detect();
         redirectLogs(paths);
@@ -50,6 +62,12 @@ public final class SmartBillingApp {
 
     private static void start(AppPaths paths) {
         Theme.install();
+        DeviceLock.State device = DeviceLock.check();
+        if (device != DeviceLock.State.OK && device != DeviceLock.State.NOT_LOCKED) {
+            Msg.error(null, "Smart Billing Pro can't start here", DeviceLock.explain(device));
+            System.exit(2);
+            return;
+        }
         InstanceLock lock = new InstanceLock();
         if (!lock.acquire(paths.lockFile())) {
             JOptionPane.showMessageDialog(null, "Smart Billing Pro is already open on this computer.",

@@ -3,6 +3,16 @@
 Everything works without the internet. There is one window with nine tabs on
 the left; `Ctrl+1` … `Ctrl+9` jump between them.
 
+## 0. Installing
+
+Run **`SmartBillingPro-Setup-4.0.0.exe`** on the shop's laptop. Accept the
+terms of use, then click through the wizard; everything the app needs is
+inside the installer. The installer registers the laptop: the installed app
+only runs on that laptop, and if its files are copied to another computer it
+refuses to start there. After a repair or a Windows reinstall on the same
+laptop, simply run the installer again — your data is kept. The terms can be
+read again any time under *Tools & Settings › Security & data › Terms of use*.
+
 ## 1. First start
 
 The first time the app opens it asks a few short questions, one at a time:

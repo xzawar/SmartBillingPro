@@ -1,5 +1,7 @@
 # Smart Billing Pro — Offline POS
 
+*Developed by KeyKraft.*
+
 A fast, fully **offline** point-of-sale and shop management app for Windows.
 One shop, one owner, one window. All data stays on the computer in a local
 SQLite database, with automatic daily backups. No internet connection, no
@@ -19,14 +21,28 @@ online account and no server are needed.
 
 ## Install on Windows (no Java needed)
 
-Download **`SmartBillingPro-4.0.0-windows.zip`** from the latest
-*Build Windows app* run in the repository's **Actions** tab (or build it
-yourself, below), unzip it anywhere (e.g. `C:\SmartBillingPro`) and run
-`SmartBillingPro\SmartBillingPro.exe`. Pin it to the taskbar. The folder
-contains its own Java runtime.
+Use the installer **`SmartBillingPro-Setup-4.0.0.exe`**. Get it from the
+latest *Build Windows installer* run in the repository's **Actions** tab
+(artifact *SmartBillingPro-Setup*), or make it yourself with
+`make-installer.bat` (below).
+
+Copy the installer to the shop's laptop and run it there:
+
+1. Accept the **terms of use** (the installer will not continue otherwise).
+2. Click through the wizard. Everything the app needs, including its own Java
+   runtime, is inside the installer: no internet connection and no other
+   software is needed.
+3. The installer **registers that laptop**. The installed app only runs on
+   it: if its files are copied to another computer, the app refuses to start
+   there and says why.
+
+Windows may show *"Windows protected your PC"* because the installer is not
+code-signed: click **More info** › **Run anyway**.
 
 Your data is stored in `%LOCALAPPDATA%\SmartBillingPro` and backups in
 `Documents\SmartBillingPro Backups` (changeable in *Tools & Settings*).
+Uninstalling keeps the data. To move to a new laptop, install the app there
+and restore your latest backup.
 
 ## Build it yourself
 
@@ -37,11 +53,17 @@ libraries are already in `lib/` and `resources/`.
 |---|---|---|
 | Run from source | `run.bat` | `./run.sh` |
 | Run the tests | `run-tests.bat` | `./run-tests.sh` |
-| Build the Windows app (`dist\SmartBillingPro\SmartBillingPro.exe` + zip; installer too if WiX 3 is installed) | `build-exe.bat` | — |
+| Make the Windows installer (`dist\SmartBillingPro-Setup-4.0.0.exe`, needs Inno Setup 6) | `make-installer.bat` | — |
 | Build a portable Java bundle (+ native image for the current OS) | — | `./build.sh` |
 
+`make-installer.bat` (double-click it) checks for a JDK 17+ and
+[Inno Setup 6](https://jrsoftware.org/isdl.php) and offers to install them
+with winget if they are missing, runs the tests, packages the app with its
+own Java runtime and creates the installer.
+
 The GitHub Actions workflow `.github/workflows/build-windows.yml` runs the
-tests and builds the Windows app on every push.
+tests and builds the installer on every push, then installs it silently on
+the build machine to check the computer lock.
 
 ## Documentation
 
@@ -55,7 +77,8 @@ tests and builds the Windows app on every push.
 
 ```
 src/com/smartbillingpro/
-  app/       paths, local config, single-instance lock, wiring (AppContext)
+  app/       paths, local config, single-instance lock, computer lock
+             (DeviceLock), wiring (AppContext)
   db/        SQLite connection, versioned migrations, JDBC helper
   model/     records: Product, Variant, Sale, LedgerEntry, ...
   repo/      SQL only (one repository per area)
@@ -67,7 +90,7 @@ src/com/smartbillingpro/
   ui/        FlatLaf Swing UI: MainFrame, pages/ (9 tabs), dialogs/, components
   util/      Money (integer paisa), Qty (thousandths), Dates, Fonts, ...
 test/        self-contained test suite (no external test library)
-resources/   bundled Inter font (SIL OFL)
-packaging/   app icon
+resources/   bundled Inter font (SIL OFL), KeyKraft logo (SVG), terms of use
+packaging/   app icon, installer script (Inno Setup) and installer artwork
 lib/         sqlite-jdbc, FlatLaf, PDFBox (Apache 2.0)
 ```

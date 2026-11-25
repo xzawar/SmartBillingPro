@@ -1,4 +1,4 @@
-name: Build Windows app
+name: Build Windows installer
 
 on:
   push:
@@ -20,15 +20,44 @@ jobs:
         env:
           CI: "true"
         run: call run-tests.bat
-      - name: Build portable app (and installer when WiX is available)
-        shell: cmd
+      - name: Make sure Inno Setup 6 is available
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup could not be installed" }
+          (Get-Item $iscc).VersionInfo.ProductVersion
+      - name: Build the installer
+        shell: pwsh
         env:
           CI: "true"
-        run: call build-exe.bat
+        run: .\packaging\make-installer.ps1 -SkipTests -NonInteractive
+      - name: Install it silently and check the computer lock
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\SmartBillingPro-Setup-*.exe | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP 'SBP-install'
+          $log = Join-Path $env:RUNNER_TEMP 'sbp-setup.log'
+          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$dir", "/LOG=$log" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content $log; throw "Setup failed with exit code $($p.ExitCode)" }
+          if (-not (Test-Path "$dir\SmartBillingPro.exe")) { Get-Content $log; throw 'The app was not installed' }
+          if (-not (Test-Path "$dir\runtime")) { throw 'The bundled Java runtime is missing' }
+          if (-not (Test-Path "$dir\device.lic")) { Get-Content $log; throw 'This computer was not registered (device.lic missing)' }
+          $ok = Start-Process "$dir\SmartBillingPro.exe" -ArgumentList '--check-device' -Wait -PassThru
+          if ($ok.ExitCode -ne 0) { throw "The installed app refuses to run on the computer it was installed on ($($ok.ExitCode))" }
+          $lic = Get-Content "$dir\device.lic"
+          ($lic -replace '^machine=.*', 'machine=0000000000000000000000000000000000000000000000000000000000000000') | Set-Content "$dir\device.lic"
+          $bad = Start-Process "$dir\SmartBillingPro.exe" -ArgumentList '--check-device' -Wait -PassThru
+          if ($bad.ExitCode -eq 0) { throw 'An edited computer registration was accepted' }
+          Remove-Item "$dir\device.lic"
+          $none = Start-Process "$dir\SmartBillingPro.exe" -ArgumentList '--check-device' -Wait -PassThru
+          if ($none.ExitCode -eq 0) { throw 'A copy without a registration was accepted' }
+          $fake = Start-Process "$dir\SmartBillingPro.exe" -ArgumentList '--bind-device', 'not-the-real-token' -Wait -PassThru
+          if ($fake.ExitCode -eq 0 -or (Test-Path "$dir\device.lic")) { throw 'Registration worked without the installer token' }
+          Write-Host 'Installer OK: installs with its own Java runtime, registers this computer, and refuses edited, missing or forged registrations.'
+          Write-Host ("Installer size: {0:N1} MB" -f ($setup.Length / 1MB))
       - uses: actions/upload-artifact@v4
         with:
-          name: SmartBillingPro-windows
-          path: |
-            dist/*.zip
-            dist/*.exe
+          name: SmartBillingPro-Setup
+          path: dist/SmartBillingPro-Setup-*.exe
           if-no-files-found: error
