@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512" role="img" aria-labelledby="sbp-title">
+  <title id="sbp-title">Smart Billing Pro</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#2B3A06"/>
+  <path d="M13 17 H19.5 L25 40 H46 L50.5 24 H21" fill="none" stroke="#C8EB52" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28 31 H44" fill="none" stroke="#C8EB52" stroke-width="3.4" stroke-linecap="round" opacity="0.55"/>
+  <circle cx="27.5" cy="48" r="3.8" fill="#C8EB52"/>
+  <circle cx="43.5" cy="48" r="3.8" fill="#C8EB52"/>
+</svg>

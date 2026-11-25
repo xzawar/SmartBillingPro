@@ -2,50 +2,60 @@ package com.smartbillingpro.ui;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
-import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The application logo, drawn in code (blue tile with a receipt). */
+/**
+ * The application logo: a lime shopping cart on the theme's deep ink tile. Drawn from the same
+ * shapes as {@code resources/branding/app-logo.svg} (64 × 64 design grid), so it is sharp at any size.
+ */
 public final class AppIcon {
 
     private AppIcon() {
     }
 
+    /** Draws the logo into a {@code size} × {@code size} square at the origin. */
+    public static void paint(Graphics2D g, double size) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+        g2.scale(size / 64.0, size / 64.0);
+        g2.setColor(Theme.ACCENT_INK);
+        g2.fill(new RoundRectangle2D.Double(2, 2, 60, 60, 32, 32));
+        g2.setColor(Theme.ACCENT);
+        Path2D cart = new Path2D.Double();
+        cart.moveTo(13, 17);
+        cart.lineTo(19.5, 17);
+        cart.lineTo(25, 40);
+        cart.lineTo(46, 40);
+        cart.lineTo(50.5, 24);
+        cart.lineTo(21, 24);
+        g2.setStroke(new BasicStroke(4.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.draw(cart);
+        Graphics2D soft = (Graphics2D) g2.create();
+        soft.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
+        soft.setStroke(new BasicStroke(3.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        soft.draw(new Line2D.Double(28, 31, 44, 31));
+        soft.dispose();
+        g2.fill(new Ellipse2D.Double(27.5 - 3.8, 48 - 3.8, 7.6, 7.6));
+        g2.fill(new Ellipse2D.Double(43.5 - 3.8, 48 - 3.8, 7.6, 7.6));
+        g2.dispose();
+    }
+
     public static BufferedImage render(int size) {
         BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
-        double s = size / 64.0;
-        g.scale(s, s);
-        g.setColor(Theme.ACCENT_INK);
-        g.fill(new RoundRectangle2D.Double(2, 2, 60, 60, 16, 16));
-        Path2D r = new Path2D.Double();
-        r.moveTo(19, 13);
-        r.lineTo(45, 13);
-        r.lineTo(45, 51);
-        r.lineTo(40.7, 47.5);
-        r.lineTo(36.3, 51);
-        r.lineTo(32, 47.5);
-        r.lineTo(27.7, 51);
-        r.lineTo(23.3, 47.5);
-        r.lineTo(19, 51);
-        r.closePath();
-        g.setColor(Theme.ACCENT);
-        g.fill(r);
-        g.setColor(Theme.ACCENT_INK);
-        g.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g.drawLine(25, 23, 39, 23);
-        g.drawLine(25, 30, 39, 30);
-        g.drawLine(25, 37, 33, 37);
+        paint(g, size);
         g.dispose();
         return img;
     }

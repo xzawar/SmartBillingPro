@@ -71,6 +71,8 @@ public final class MainFrame extends JFrame {
     private final CardLayout cards = new CardLayout();
     private final JPanel content = new JPanel(cards);
     private final Map<String, Page> pages = new LinkedHashMap<>();
+    private final javax.swing.Box.Filler brandGap = new javax.swing.Box.Filler(new Dimension(0, 22), new Dimension(0, 22),
+            new Dimension(0, 22));
     private final Map<String, NavButton> navButtons = new LinkedHashMap<>();
     private final JLabel storeName = new JLabel();
     private final JLabel clock = Ui.muted("");
@@ -85,7 +87,7 @@ public final class MainFrame extends JFrame {
         this.onExit = onExit;
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         setIconImages(AppIcon.images());
-        setMinimumSize(new Dimension(980, 640));
+        setMinimumSize(new Dimension(980, 580));
         java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         setSize(Math.min(1366, screen.width), Math.min(820, screen.height));
         setLocationRelativeTo(null);
@@ -111,6 +113,12 @@ public final class MainFrame extends JFrame {
             @Override
             public void componentResized(ComponentEvent e) {
                 setCompact(getWidth() < 1180);
+                boolean shortWindow = getContentPane().getHeight() < 700;
+                pages.values().forEach(pg -> pg.setCompactHeader(shortWindow));
+                navButtons.values().forEach(b -> b.setShort(shortWindow));
+                brandGap.setPreferredSize(new Dimension(0, shortWindow ? 8 : 22));
+                brandGap.setMaximumSize(new Dimension(0, shortWindow ? 8 : 22));
+                sidebar.revalidate();
             }
         });
         for (int i = 0; i < NAV.length; i++) {
@@ -216,7 +224,7 @@ public final class MainFrame extends JFrame {
         brand.add(names, BorderLayout.CENTER);
         brand.putClientProperty("names", names);
         sidebar.add(brand);
-        sidebar.add(Box.createVerticalStrut(22));
+        sidebar.add(brandGap);
         for (int i = 0; i < NAV.length; i++) {
             String[] n = NAV[i];
             NavButton b = new NavButton(n[1], n[2], "Ctrl+" + (i + 1));
@@ -319,6 +327,12 @@ public final class MainFrame extends JFrame {
             setIcon(Icons.get(icon, 20, c));
             getAccessibleContext().setAccessibleDescription(a ? "current page" : null);
             repaint();
+        }
+
+        /** Short windows: slimmer rows so every item and the credits still fit. */
+        void setShort(boolean s) {
+            setBorder(BorderFactory.createEmptyBorder(s ? 7 : 11, 14, s ? 7 : 11, 10));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, s ? 38 : 46));
         }
 
         void setCompact(boolean c) {

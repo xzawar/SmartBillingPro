@@ -90,7 +90,7 @@ src/com/smartbillingpro/
   ui/        FlatLaf Swing UI: MainFrame, pages/ (9 tabs), dialogs/, components
   util/      Money (integer paisa), Qty (thousandths), Dates, Fonts, ...
 test/        self-contained test suite (no external test library)
-resources/   bundled Inter font (SIL OFL), KeyKraft logo (SVG), terms of use
+resources/   bundled Inter font (SIL OFL), app logo + KeyKraft logo (SVG), terms of use
 packaging/   app icon, installer script (Inno Setup) and installer artwork
 lib/         sqlite-jdbc, FlatLaf, PDFBox (Apache 2.0)
 ```
