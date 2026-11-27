@@ -69,8 +69,55 @@ public final class Printers {
             printRaw(service, EscPosReceipt.bytes(data, st.charsPerLine(), st.cutPaper(), st.openDrawer()),
                     "Receipt " + data.receiptNo());
         } else {
-            printRollViaDriver(service, data, st.paperWidthMm(), st.printableWidthMm(), st.receiptFontPt());
+            printViaDriverWithFallbacks(service, data, st);
         }
+    }
+
+    /**
+     * Many cheap POS printers (generic "POS-80" / "POS-58" drivers) reject a custom roll size or have no
+     * matching paper defined. Try, in order: the exact roll size, the driver's own paper, then raw ESC/POS
+     * text (which nearly every receipt printer accepts). Only if all fail is the first error shown.
+     */
+    private static void printViaDriverWithFallbacks(PrintService service, ReceiptData data, Settings st) {
+        RuntimeException first;
+        try {
+            printRollViaDriver(service, data, st.paperWidthMm(), st.printableWidthMm(), st.receiptFontPt(), true);
+            return;
+        } catch (RuntimeException e) {
+            first = e;
+            log("Receipt via driver with roll size failed on " + service.getName(), e);
+        }
+        try {
+            printRollViaDriver(service, data, st.paperWidthMm(), st.printableWidthMm(), st.receiptFontPt(), false);
+            return;
+        } catch (RuntimeException e) {
+            log("Receipt via driver with the driver's paper failed on " + service.getName(), e);
+        }
+        if (service.isDocFlavorSupported(DocFlavor.BYTE_ARRAY.AUTOSENSE)) {
+            try {
+                printRaw(service, EscPosReceipt.bytes(data, st.charsPerLine(), st.cutPaper(), st.openDrawer()),
+                        "Receipt " + data.receiptNo());
+                return;
+            } catch (RuntimeException e) {
+                log("Receipt as raw ESC/POS failed on " + service.getName(), e);
+            }
+        }
+        throw new AppException("The printer \"" + service.getName() + "\" did not accept the receipt. "
+                + "Check that it is switched on, has paper and shows as \"Ready\" in Windows Settings > Printers, "
+                + "and that a Windows test page prints.\n\nDetails: " + detail(first), first);
+    }
+
+    private static String detail(Throwable e) {
+        Throwable t = e;
+        while (t.getCause() != null && t.getCause() != t) {
+            t = t.getCause();
+        }
+        String m = t.getMessage();
+        return t.getClass().getSimpleName() + (m == null || m.isBlank() ? "" : ": " + m);
+    }
+
+    private static void log(String what, Throwable e) {
+        System.err.println("[print] " + what + ": " + detail(e));
     }
 
     private static void printRaw(PrintService service, byte[] bytes, String jobName) {
@@ -91,7 +138,7 @@ public final class Printers {
     }
 
     private static void printRollViaDriver(PrintService service, ReceiptData data, int paperMm, int printableMm,
-                                           float fontPt) {
+                                           float fontPt, boolean exactRollSize) {
         float paperW = paperMm * ReceiptLayout.MM;
         float printable = printableMm * ReceiptLayout.MM;
         float margin = (paperW - printable) / 2f;
@@ -114,11 +161,15 @@ public final class Printers {
                 ReceiptLayout.drawRoll(new Graphics2DCanvas(g2), data, margin, 6, printable, fontPt);
                 return Printable.PAGE_EXISTS;
             }, pf);
-            PrintRequestAttributeSet attrs = new HashPrintRequestAttributeSet();
-            attrs.add(new MediaPrintableArea(0, 0, paperMm, Math.max(paperMm, height / ReceiptLayout.MM),
-                    MediaPrintableArea.MM));
-            job.print(attrs);
-        } catch (PrinterException e) {
+            if (exactRollSize) {
+                PrintRequestAttributeSet attrs = new HashPrintRequestAttributeSet();
+                attrs.add(new MediaPrintableArea(0, 0, paperMm, Math.max(paperMm, height / ReceiptLayout.MM),
+                        MediaPrintableArea.MM));
+                job.print(attrs);
+            } else {
+                job.print();
+            }
+        } catch (PrinterException | RuntimeException e) {
             throw new AppException("Printing failed: " + e.getMessage(), e);
         }
     }
