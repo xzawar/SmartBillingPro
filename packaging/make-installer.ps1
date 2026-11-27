@@ -143,8 +143,22 @@ $jpackage = Join-Path $jdk 'jpackage.exe'
 Write-Host "  Java JDK    : $jdk"
 Write-Host "  Inno Setup  : $iscc"
 
+if ($Root -match 'OneDrive') {
+    Write-Host '  Note: this folder is inside OneDrive. If the build fails with "AccessDenied", move the project folder' -ForegroundColor Yellow
+    Write-Host '        to e.g. C:\SmartBillingPro-src, or right-click it in Explorer > "Always keep on this device".' -ForegroundColor Yellow
+}
+
 if (Test-Path $Build) { Remove-Item $Build -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $Build | Out-Null
+
+# Work on local copies of the libraries: OneDrive / cloud-synced folders can make the Java compiler
+# fail with "AccessDeniedException" when it reads jars straight from them.
+$Lib = Join-Path $Build 'lib'
+New-Item -ItemType Directory -Force -Path $Lib | Out-Null
+foreach ($jarFile in Get-ChildItem -Path (Join-Path $Root 'lib') -Filter '*.jar') {
+    [IO.File]::WriteAllBytes((Join-Path $Lib $jarFile.Name), [IO.File]::ReadAllBytes($jarFile.FullName))
+}
+$LibCp = (Join-Path $Lib '*')
 
 # ------------------------------------------------------------------ 2. tests
 if ($SkipTests) {
@@ -155,9 +169,9 @@ if ($SkipTests) {
     New-Item -ItemType Directory -Force -Path $testClasses | Out-Null
     $testList = Join-Path $Build 'test-sources.txt'
     Write-Sources $testList @('src', 'test')
-    Run $javac @('-encoding', 'UTF-8', '--release', '17', '-d', $testClasses, '-cp', 'lib/*', "@$testList")
+    Run $javac @('-encoding', 'UTF-8', '--release', '17', '-d', $testClasses, '-cp', $LibCp, "@$testList")
     Copy-Item -Path (Join-Path $Root 'resources\*') -Destination $testClasses -Recurse -Force
-    Run $java @('-Djava.awt.headless=true', '-cp', "$testClasses;lib/*", 'com.smartbillingpro.TestRunner')
+    Run $java @('-Djava.awt.headless=true', '-cp', "$testClasses;$LibCp", 'com.smartbillingpro.TestRunner')
 }
 
 # ------------------------------------------------------------------ 3. compile + token
@@ -166,7 +180,7 @@ $classes = Join-Path $Build 'classes'
 New-Item -ItemType Directory -Force -Path $classes | Out-Null
 $srcList = Join-Path $Build 'sources.txt'
 Write-Sources $srcList @('src')
-Run $javac @('-encoding', 'UTF-8', '--release', '17', '-d', $classes, '-cp', 'lib/*', "@$srcList")
+Run $javac @('-encoding', 'UTF-8', '--release', '17', '-d', $classes, '-cp', $LibCp, "@$srcList")
 Copy-Item -Path (Join-Path $Root 'resources\*') -Destination $classes -Recurse -Force
 
 # Each build gets its own random token. Only its SHA-256 goes into the app; the token itself only
@@ -184,7 +198,7 @@ $jarInput = Join-Path $Build 'input'
 New-Item -ItemType Directory -Force -Path $jarInput | Out-Null
 Run $jar @('--create', '--file', (Join-Path $jarInput 'SmartBillingPro.jar'), '--main-class', 'com.smartbillingpro.SmartBillingApp',
            '-C', $classes, '.')
-Copy-Item -Path (Join-Path $Root 'lib\*.jar') -Destination $jarInput -Force
+Copy-Item -Path (Join-Path $Lib '*.jar') -Destination $jarInput -Force
 
 # ------------------------------------------------------------------ 4. app with its own runtime
 Step 4 'Packaging the app with its own Java runtime (this takes a minute)...'
